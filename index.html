@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#000005" />
+  <meta name="description" content="Cérémonie de parrainage Binomage — AEFC-INPHB 2026" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>BINOMAGE — AEFC-INPHB</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Inter+Tight:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="binomage.css">
+  <link rel="preload" as="image" href="logo_aefc.png">
+  <link rel="preload" as="image" href="logo_bfa.png">
+  <link rel="preload" as="image" href="logo_cca.jpeg">
+</head>
+<body class="stage-mode">
+
+  <div class="stage" id="stage">
+    <div class="mesh"></div>
+    <div class="grain"></div>
+  </div>
+
+  <div class="flash-overlay" id="flashOverlay"></div>
+
+  <button class="ops-launch-back" id="opsBack" aria-label="Retour à la régie">← Régie</button>
+  <button class="sound-toggle" id="soundToggle" aria-label="Activer ou couper le son" title="Son">
+    <svg class="ico-on"  width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+    <svg class="ico-off" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+  </button>
+
+  <div class="screens">
+
+    <!-- ÉCRAN 1 : INTRO -->
+    <section class="screen" id="screen-1" aria-label="Introduction">
+      <div class="intro-stage">
+
+        <div class="intro-rolling-wrapper" id="introRollingWrapper">
+
+          <div class="intro-logo-area" id="introLogoArea">
+            <div class="intro-logo-rotation" id="introLogoRotation">
+              <div class="intro-logo-container" id="introLogoContainer">
+                <img src="logo_aefc.png" alt="AEFC-INPHB" class="intro-logo-image" />
+                <div class="intro-metal-shine" id="introMetalShine"></div>
+              </div>
+            </div>
+            <div class="intro-impact-point" id="introImpactPoint"></div>
+          </div>
+
+          <div class="intro-content-side" id="introContentSide">
+            <div class="intro-vertical-line"></div>
+            <div class="intro-text-group">
+              <div class="intro-text-item intro-text-aefc"     id="introTextAefc">AE-FC</div>
+              <div class="intro-text-item intro-text-binomage" id="introTextBinomage">BINOMAGE</div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="intro-tagline-bottom" id="introTaglineBottom">Cérémonie de parrainage · 2026</div>
+      </div>
+    </section>
+
+    <!-- ÉCRAN 2 : ACCUEIL -->
+    <section class="screen" id="screen-2" aria-label="Accueil">
+      <div class="home-logo-wrap fade-up">
+        <div class="home-logo">
+          <img src="logo_aefc.png" alt="AEFC-INPHB" />
+        </div>
+      </div>
+      <div class="home-eyebrow fade-up">AEFC-INPHB · Binomage 2026</div>
+      <h1 class="home-title fade-up">Une soirée. Un code.<br/><em>Un binôme.</em></h1>
+      <p class="home-sub fade-up">L'Association des Étudiants en Finance-Comptabilité vous accueille pour la révélation officielle des parrainages.</p>
+      <button class="home-cta stage-cta fade-up" id="startBtn">
+        <span>Commencer l'expérience</span>
+        <svg class="arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M1 7H13M13 7L7.5 1.5M13 7L7.5 12.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </section>
+
+    <!-- ÉCRAN 3 : SAISIE DU CODE -->
+    <section class="screen" id="screen-3" aria-label="Saisie du code d'accès">
+      <div class="code-shell">
+        <div class="code-eyebrow fade-up">Accès personnel</div>
+        <h2 class="code-title fade-up">Saisissez votre code</h2>
+        <p class="code-sub fade-up">Quatre caractères vous séparent de votre binôme. Le code figure sur votre invitation.</p>
+        <div class="code-inputs fade-up" id="codeInputs">
+          <input class="code-input" maxlength="1" autocomplete="off" inputmode="text" data-i="0" aria-label="Caractère 1" />
+          <input class="code-input" maxlength="1" autocomplete="off" inputmode="text" data-i="1" aria-label="Caractère 2" />
+          <input class="code-input" maxlength="1" autocomplete="off" inputmode="text" data-i="2" aria-label="Caractère 3" />
+          <input class="code-input" maxlength="1" autocomplete="off" inputmode="text" data-i="3" aria-label="Caractère 4" />
+        </div>
+        <div class="code-msg fade-up" id="codeMsg" aria-live="polite">&nbsp;</div>
+        <div class="code-hint fade-up">
+          <span class="dot"></span>
+          <span>En attente de la saisie complète</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ÉCRAN LIAISON -->
+    <section class="screen liaison" id="screen-liaison" aria-label="Transition" aria-live="polite">
+      <div class="liaison-wrap">
+        <p class="liaison-text" id="liaisonText"></p>
+        <div class="liaison-line" id="liaisonLine"></div>
+      </div>
+    </section>
+
+    <!-- ÉCRAN 4 : SUSPENSE -->
+    <section class="screen" id="screen-4" aria-label="Suspense">
+      <div class="suspense-wrap">
+        <div class="suspense-halo"></div>
+        <h2 class="suspense-text" id="suspenseText">
+          <span class="word">Qui</span> <span class="word">se</span> <span class="word">cache</span> <span class="word"><em>derrière</em></span><br/>
+          <span class="word">ce</span> <span class="word">code</span><span class="word">&nbsp;?</span>
+        </h2>
+        <div class="suspense-dots" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ÉCRAN 5 : SPHÈRE -->
+    <section class="screen" id="screen-5" aria-label="Validation du code">
+      <div class="sphere-wrap">
+        <canvas class="sphere-canvas" id="sphereCanvas" width="960" height="960" aria-hidden="true"></canvas>
+        <div class="sphere-core" id="sphereCore">
+          <div class="sphere-label">Identité encodée</div>
+          <div class="sphere-code" id="sphereCode">— — — —</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ÉCRAN 6 : DUEL DES FILIÈRES -->
+    <section class="screen" id="screen-6" aria-label="Révélation de la filière">
+      <div class="filieres-stage">
+        <div class="caption fade-up filiere-caption">Filière révélée</div>
+        <div class="filieres-wrap" id="filieresWrap">
+          <div class="filiere-card" id="cardBFA">
+            <div class="filiere-logo">
+              <img src="logo_bfa.png" alt="BFA" onerror="this.style.display='none'" />
+            </div>
+            <div class="filiere-name">BFA</div>
+            <div class="filiere-full">Banque<br/>Finance<br/>Assurance</div>
+          </div>
+          <div class="filiere-card" id="cardCCA">
+            <div class="filiere-logo">
+              <img src="logo_cca.png" alt="CCA" onerror="this.style.display='none'" />
+            </div>
+            <div class="filiere-name">CCA</div>
+            <div class="filiere-full">Comptabilité<br/>Contrôle<br/>Audit</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ÉCRAN 7 : SPÉCIALITÉ -->
+    <section class="screen" id="screen-7" aria-label="Spécialité">
+      <div class="specialty-wrap" id="specialtyWrap">
+        <div class="specialty-tag fade-up">Spécialité</div>
+        <div class="specialty-logo fade-up">
+          <img id="specialtyLogo" alt="" />
+        </div>
+        <h2 class="specialty-name fade-up" id="specialtyName">CCA</h2>
+        <div class="specialty-line fade-up"></div>
+        <p class="specialty-quote fade-up" id="specialtyQuote">« La rigueur des chiffres au service de la décision. »</p>
+      </div>
+    </section>
+
+    <!-- ÉCRAN 8 : SCAN DES PARRAINS -->
+    <section class="screen" id="screen-8" aria-label="Scan des parrains">
+      <div class="scan-wrap">
+        <div class="scan-eyebrow fade-up">Identification en cours</div>
+        <div class="scan-window fade-up">
+          <div class="scan-fade-top"></div>
+          <div class="scan-track" id="scanTrack"></div>
+          <div class="scan-focus"></div>
+          <div class="scan-fade-bot"></div>
+        </div>
+        <div class="scan-status fade-up" id="scanStatus">
+          <span class="pulse"></span>
+          <span id="scanStatusText">Scan des parrains</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ÉCRAN GENRE -->
+    <section class="screen" id="screen-genre" aria-label="Genre">
+      <div class="genre-wrap">
+        <div class="genre-halo"></div>
+        <div class="genre-label" id="genreLabel">Parrain ou marraine ?</div>
+        <div class="genre-question" id="genreQuestion">Qui se cache derrière ce code ?</div>
+        <div class="genre-silhouettes" id="genreSilhouettes">
+          <div class="genre-figure" id="genreFigHomme">
+            <div class="genre-silhouette" aria-hidden="true">
+              <img src="silouhette%20homme%20et%20femme/silouhette%20homme.png" alt="Silhouette homme" />
+            </div>
+            <div class="genre-figure-label">Parrain</div>
+          </div>
+          <div class="genre-separator"></div>
+          <div class="genre-figure" id="genreFigFemme">
+            <div class="genre-silhouette" aria-hidden="true">
+              <img src="silouhette%20homme%20et%20femme/silouhette%20femme.png" alt="Silhouette femme" />
+            </div>
+            <div class="genre-figure-label">Marraine</div>
+          </div>
+        </div>
+        <div class="genre-badge" id="genreBadge">Chargement...</div>
+      </div>
+    </section>
+
+    <!-- ÉCRAN COUNTDOWN -->
+    <section class="screen" id="screen-countdown" aria-label="Compte à rebours">
+      <div class="countdown-wrap">
+        <div class="countdown-halo"></div>
+        <div class="countdown-particles" id="cdParticles"></div>
+        <p class="countdown-intro" id="cdIntro">
+          Le moment est venu de découvrir<br/><em>votre binôme pour cette année</em>
+        </p>
+        <div class="countdown-label" id="cdLabel">Révélation dans</div>
+        <div class="countdown-number" id="cdNumber"></div>
+        <div class="countdown-line" id="cdLine"></div>
+      </div>
+    </section>
+
+    <!-- ÉCRAN 10 : RÉVÉLATION -->
+    <section class="screen" id="screen-10" aria-label="Révélation du binôme">
+      <div class="reveal-scene">
+        <div class="reveal-spotlight"></div>
+        <div class="reveal-rays"></div>
+        <div class="reveal-confetti" id="revealConfetti"></div>
+
+        <!-- Overlay d'erreur "Faux indice" -->
+        <div class="reveal-fake-overlay" id="revealFakeOverlay">
+          <div class="reveal-fake-content">
+            <div class="reveal-fake-icon">
+              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </div>
+            <div class="reveal-fake-label">FAUX INDICE</div>
+            <h3 class="reveal-fake-title">Ce n'est pas votre binôme</h3>
+            <p class="reveal-fake-sub" id="revealFakeSub">Le destin nous a joué un tour…</p>
+          </div>
+        </div>
+
+        <div class="reveal-layout-horizontal">
+
+          <div class="reveal-portrait-col">
+            <div class="reveal-portrait-wrap" id="revealPortraitWrap">
+              <div class="reveal-portrait-frame"></div>
+              <div class="reveal-portrait" id="revealPortrait"></div>
+            </div>
+          </div>
+
+          <div class="reveal-text-col" id="revealTextCol">
+            <div class="reveal-eyebrow" id="revealEyebrow">Votre binôme est</div>
+            <h2 class="reveal-name" id="revealName">—</h2>
+            <div class="reveal-line"></div>
+            <div class="reveal-badge" id="revealBadge">— · AEFC-INPHB</div>
+
+            <div class="reveal-actions stage-actions" id="revealActions">
+              <button class="reveal-btn" id="restartBtn">Recommencer</button>
+              <button class="reveal-btn primary" id="shareBtn">Partager le moment</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <div class="stage-restart" id="stageRestart">Nouvelle révélation dans 14s</div>
+    </section>
+
+    <!-- ÉCRAN 99 : RÉGIE -->
+    <section class="screen" id="screen-99" aria-label="Mode régie">
+      <div class="ops-shell">
+        <div class="ops-header">
+          <h1>Régie <em>Binomage</em></h1>
+          <div class="ops-stat">
+            <div><strong id="opsCount">0</strong>codes utilisés</div>
+            <div><strong id="opsTotal">42</strong>codes au total</div>
+          </div>
+        </div>
+        <div class="ops-search">
+          <input id="opsInput" placeholder="Saisir le code (ex. KM28)" maxlength="4" autocomplete="off" aria-label="Code parrain" />
+          <button class="ops-go" id="opsLaunch" disabled>Lancer la révélation</button>
+        </div>
+        <div class="ops-preview empty" id="opsPreview">Tapez un code pour prévisualiser le parrain attendu</div>
+        <div class="ops-history">
+          <div class="ops-history-header">
+            <span>Historique de la session</span>
+            <button class="ops-clear" id="opsClear">Réinitialiser</button>
+          </div>
+          <div id="opsHistoryBody">
+            <div class="ops-history-empty">Aucun code utilisé pour l'instant</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <nav class="dev-nav" id="devNav" aria-label="Navigation des écrans (développement)">
+    <button data-go="1">1</button>
+    <button data-go="2">2</button>
+    <button data-go="3">3</button>
+    <button data-go="4">4</button>
+    <button data-go="5">5</button>
+    <button data-go="6">6</button>
+    <button data-go="7">7</button>
+    <button data-go="8">8</button>
+    <button data-go="genre">G</button>
+    <button data-go="countdown">9</button>
+    <button data-go="10">10</button>
+    <button data-go="99">R</button>
+  </nav>
+
+  <script src="binomage.js"></script>
+</body>
+</html>
