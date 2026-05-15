@@ -163,7 +163,7 @@ scanAudio.volume = 0.75;
 
 // Écrans sur lesquels l'ambient ne tourne PAS
 // - '1' : intro (pas de son du tout)
-// - '8', 'genre', 'countdown', '10' : scan prend le relais (ou silence)
+// - '8', 'genre', 'countdown', '10' : le son de scan tourne en continu
 const NO_AMBIENT_SCREENS = new Set(['1', '8', 'genre', 'countdown', '10']);
 
 function loadSoundPref() {
@@ -263,19 +263,20 @@ function applyAudioForScreen(screenId) {
   if (s === '8') {
     // Scan : arrêter l'ambient, lancer le son de scan
     stopAmbient(600);
-    setTimeout(() => startScan(), 700); // légère latence pour le fondu de l'ambient
+    setTimeout(() => startScan(), 700);
     return;
   }
 
   if (NO_AMBIENT_SCREENS.has(s)) {
-    // genre / countdown / 10 : le scan continue s'il tourne encore, sinon silence
-    // On stoppe l'ambient au cas où, on ne relance pas le scan
-    stopAmbient(400);
+    // genre / countdown / 10 : le son de scan continue depuis l'écran 8
+    // on stoppe juste l'ambient au cas où, sans toucher au scan
+    stopAmbient(200);
     return;
   }
 
-  // Tous les autres écrans : ambient
-  stopScan(400);
+  // Tous les autres écrans (2, 3, liaison, 4, 5, 6, 7, 99) : ambient
+  // on arrête le scan s'il tourne encore (retour depuis écran 10 ou ops)
+  stopScan(600);
   startAmbient(1200);
 }
 
