@@ -263,7 +263,8 @@ function applyAudioForScreen(screenId) {
   if (s === '8') {
     // Scan : arrêter l'ambient, lancer le son de scan
     stopAmbient(600);
-    setTimeout(() => startScan(), 700);
+    // Lancement direct sans setTimeout pour rester dans le contexte audio débloqué
+    startScan();
     return;
   }
 
@@ -1482,19 +1483,37 @@ function launchFromOps() {
    ----------------------------------------------------------- */
 function applyMode() {
   document.body.classList.add('stage-mode');
+
   const tryFs = () => {
     if (document.fullscreenElement) return;
     document.documentElement.requestFullscreen?.().catch(() => {});
   };
-  // Premier clic ou touche : init audio + fullscreen
-  const initOnInteraction = () => {
-    // Débloquer les éléments audio (politique autoplay navigateur)
-    ambientAudio.load();
-    scanAudio.load();
+
+  // Dès le premier geste utilisateur : débloquer l'autoplay du navigateur
+  // en jouant puis mettant en pause instantanément les deux pistes.
+  // Sans ce "warm-up", tout play() ultérieur (même déclenché par code)
+  // est bloqué par la politique autoplay des navigateurs modernes.
+  const unlockAudio = () => {
+    [ambientAudio, scanAudio].forEach(audio => {
+      const savedVol = audio.volume;
+      audio.volume = 0;
+      const p = audio.play();
+      if (p !== undefined) {
+        p.then(() => {
+          audio.pause();
+          audio.currentTime = 0;
+          audio.volume = savedVol;
+        }).catch(() => {});
+      }
+    });
+    // Une fois débloqué, appliquer le bon son pour l'écran courant
+    setTimeout(() => applyAudioForScreen(state.current), 150);
     tryFs();
   };
-  document.addEventListener('click',   initOnInteraction, { once: true });
-  document.addEventListener('keydown', initOnInteraction, { once: true });
+
+  document.addEventListener('click',     unlockAudio, { once: true });
+  document.addEventListener('keydown',   unlockAudio, { once: true });
+  document.addEventListener('touchstart', unlockAudio, { once: true });
 }
 
 /* -----------------------------------------------------------
