@@ -27,7 +27,7 @@ const DB = {
   "EH17": { nom: "COULIBALY ABDOUL AZIZ",               filiere: "CCA", photo: "parrains/Aziz.jpg" },
   "HW85": { nom: "N'DRI ATTALIEL MOAYE",                filiere: "CCA", photo: "parrains/n'dri.jpg" },
   "KA39": { nom: "LEZOU EBA RENEE NANCY",               filiere: "CCA", photo: "marraine/lezou.jpg" },
-  "KK71": { nom: "ODEHOUR-KOUDOU PAUL-ALEX",           filiere: "BFA", photo: "parrains/odk.jpg" },
+  "KK71": { nom: "ODEHOURI-KOUDOU PAUL-ALEX",           filiere: "BFA", photo: "parrains/odk.jpg" },
   "KS24": { nom: "TOUAN LOU IRIE RUTH MARIE DANIELLE",  filiere: "CCA", photo: "marraine/LOU.jpg"  },
   "KE56": { nom: "KOUO PIERRE-MARIE DANIEL",            filiere: "CCA", photo: "parrains/Daniel.jpg" },
   "KA03": { nom: "LEZOU EBA RENEE NANCY",               filiere: "CCA", photo: "marraine/lezou.jpg" },
