@@ -19,7 +19,7 @@
 const DB = {
   "AK47": { nom: "YASSI CHRISLAURE",                    filiere: "CCA", photo: "marraine/yassi.jpg" },
   "BN82": { nom: "TIOKARI AMADOU",                      filiere: "BFA", photo: "parrains/tiok.jpg" },
-  "BJ15": { nom: "KOTOUDJE YANN EVRARD",                filiere: "BFA", photo: "parrains/Yann-K.jpg" },
+  "BJ15": { nom: "KOTOUDJE YANN-EVRARD",                filiere: "BFA", photo: "parrains/Yann-K.jpg" },
   "CM63": { nom: "DJIGUEMDE FATIMA ZARA",               filiere: "CCA", photo: "marraine/zara.jpg" },
   "CF29": { nom: "SANOGO ABOUBACAR SIDIK",              filiere: "CCA", photo: "parrains/sanogo.jpg" },
   "DE74": { nom: "WOUEDJE KASSI VIANNEY",               filiere: "CCA", photo: "parrains/marvin.jpg" },
