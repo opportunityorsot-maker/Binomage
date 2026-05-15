@@ -135,29 +135,45 @@
       </div>
     </section>
 
-    <!-- ÉCRAN 6 : DUEL DES FILIÈRES -->
-    <section class="screen" id="screen-6" aria-label="Révélation de la filière">
-      <div class="filieres-stage">
-        <div class="caption fade-up filiere-caption">Filière révélée</div>
-        <div class="filieres-wrap" id="filieresWrap">
-          <div class="filiere-card" id="cardBFA">
-            <div class="filiere-logo">
-              <img src="logo_bfa.png" alt="BFA" onerror="this.style.display='none'" />
-            </div>
-            <div class="filiere-name">BFA</div>
-            <div class="filiere-full">Banque<br/>Finance<br/>Assurance</div>
-          </div>
-          <div class="filiere-card" id="cardCCA">
-            <div class="filiere-logo">
-              <img src="logo_cca.png" alt="CCA" onerror="this.style.display='none'" />
-            </div>
-            <div class="filiere-name">CCA</div>
-            <div class="filiere-full">Comptabilité<br/>Contrôle<br/>Audit</div>
-          </div>
-        </div>
-      </div>
-    </section>
+    <!-- 
+  BINOMAGE — Patch HTML v7
+  Dans le fichier binomage.html, remplacer les deux blocs filiere-full de l'écran 6.
+  
+  AVANT (BFA) :
+    <div class="filiere-full">Banque<br/>Finance<br/>Assurance</div>
+  APRÈS :
+    <div class="filiere-full">Pur</div>
 
+  AVANT (CCA) :
+    <div class="filiere-full">Comptabilité<br/>Contrôle<br/>Audit</div>
+  APRÈS :
+    <div class="filiere-full">Dur</div>
+
+  Ci-dessous le bloc complet de l'écran 6 corrigé à coller en remplacement :
+-->
+
+<!-- ÉCRAN 6 : DUEL DES FILIÈRES -->
+<section class="screen" id="screen-6" aria-label="Révélation de la filière">
+  <div class="filieres-stage">
+    <div class="caption fade-up filiere-caption">Filière révélée</div>
+    <div class="filieres-wrap" id="filieresWrap">
+      <div class="filiere-card" id="cardBFA">
+        <div class="filiere-logo">
+          <img src="logo_bfa.png" alt="BFA" onerror="this.style.display='none'" />
+        </div>
+        <div class="filiere-name">BFA</div>
+        <div class="filiere-full">Pur</div>
+      </div>
+      <div class="filiere-card" id="cardCCA">
+        <div class="filiere-logo">
+          <img src="logo_cca.png" alt="CCA" onerror="this.style.display='none'" />
+        </div>
+        <div class="filiere-name">CCA</div>
+        <div class="filiere-full">Dur</div>
+      </div>
+    </div>
+  </div>
+</section>
     <!-- ÉCRAN 7 : SPÉCIALITÉ -->
     <section class="screen" id="screen-7" aria-label="Spécialité">
       <div class="specialty-wrap" id="specialtyWrap">

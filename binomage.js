@@ -1,14 +1,12 @@
 /* ============================================================
-   BINOMAGE — Logique applicative v7
+   BINOMAGE — Logique applicative v8
    AEFC-INPHB · Cérémonie de parrainage 2026
 
-   CORRECTIONS v7 :
-   - Écran 1 : décalage propre du logo seul (plus de conflit de transform sur le wrapper)
-   - Code : suppression du son shimmer lors de la validation du code
-   - Liaison toFiliere : nouvelle phrase "Pur ou Dur ?"
-   - Écran 6 : "Pur" (BFA) et "Dur" (CCA) à la place des définitions
-   - Écran 8 : position du vrai parrain vraiment aléatoire (pas toujours en fin de liste)
-               correction du bug de blocage total après révélation du faux parrain
+   AUDIO v8 :
+   - Suppression du moteur snd() WebAudio
+   - sound_ambient.mp3 (nastelbom) : boucle sur tous les écrans
+     sauf écran 1 et sauf écran 8 → révélation finale
+   - sound_scan.mp3 (solarflex) : joué une fois pendant le scan (écran 8)
    ============================================================ */
 
 /* -----------------------------------------------------------
@@ -82,10 +80,9 @@ const CONFETTI_COLORS = [
   '#1E3A8A', '#2547AD', '#fff', '#0EA5E9'
 ];
 
-/* FIX #3 — Nouvelle phrase pour la liaison toFiliere avec "Pur" et "Dur" */
 const LIAISONS = {
   toSuspense:  "Un code. Un parcours. <em>Un binôme.</em>",
-  toFiliere:   "Serez-vous un <em>Pur</em>ou un <em>Dur</em> ?",
+  toFiliere:   "Serez-vous un <em>Pur</em> ou un <em>Dur</em> ?",
   toScan:      "Maintenant, identifions <em>la personne.</em>",
   toCountdown: "Le moment est <em>venu.</em>"
 };
@@ -141,7 +138,8 @@ const state = {
   fromOps: false,
   countdownActive: false,
   soundEnabled: false,
-  fakeRevealActive: false
+  fakeRevealActive: false,
+  scanRunning: false
 };
 
 function clearTimers(list) {
@@ -150,188 +148,23 @@ function clearTimers(list) {
 }
 
 /* -----------------------------------------------------------
-   4. SOUND DESIGN
+   4. SYSTÈME AUDIO MP3
    ----------------------------------------------------------- */
-let audioCtx = null;
-let masterGain = null;
 
-function initAudio() {
-  if (audioCtx) return;
-  try {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    masterGain = audioCtx.createGain();
-    masterGain.gain.value = 0.85;
-    masterGain.connect(audioCtx.destination);
-  } catch (e) { console.warn('Audio non disponible', e); }
-}
+// Ambient : nastelbom-suspense — boucle sur tous les écrans sauf 1 et sauf 8→10
+const ambientAudio = new Audio('nastelbom-suspense-501709.mp3');
+ambientAudio.loop = true;
+ambientAudio.volume = 0.55;
 
-function snd(type) {
-  if (!state.soundEnabled || !audioCtx) return;
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-  const t = audioCtx.currentTime;
+// Scan : solarflex-suspense-tension — joué une fois pendant le scan (écran 8)
+const scanAudio = new Audio('solarflex-suspense-tension-515504.mp3');
+scanAudio.loop = false;
+scanAudio.volume = 0.75;
 
-  switch (type) {
-    case 'tap': {
-      const o1 = audioCtx.createOscillator(); const g1 = audioCtx.createGain();
-      o1.frequency.value = 80; o1.type = 'sine';
-      g1.gain.setValueAtTime(0.55, t); g1.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
-      o1.connect(g1).connect(masterGain); o1.start(t); o1.stop(t + 0.08);
-      const o2 = audioCtx.createOscillator(); const g2 = audioCtx.createGain();
-      o2.frequency.value = 1200; o2.type = 'triangle';
-      g2.gain.setValueAtTime(0.12, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
-      o2.connect(g2).connect(masterGain); o2.start(t); o2.stop(t + 0.04);
-      break;
-    }
-    case 'whoosh': {
-      const bufferSize = audioCtx.sampleRate * 0.9;
-      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * 0.65;
-      const src = audioCtx.createBufferSource(); src.buffer = buffer;
-      const filter = audioCtx.createBiquadFilter();
-      filter.type = 'bandpass'; filter.Q.value = 1.4;
-      filter.frequency.setValueAtTime(200, t);
-      filter.frequency.exponentialRampToValueAtTime(2800, t + 0.7);
-      const g = audioCtx.createGain();
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.38, t + 0.15);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
-      src.connect(filter).connect(g).connect(masterGain);
-      src.start(t); src.stop(t + 0.9);
-      break;
-    }
-    case 'thud': {
-      const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
-      o.type = 'sine'; o.frequency.setValueAtTime(90, t);
-      o.frequency.exponentialRampToValueAtTime(32, t + 0.4);
-      g.gain.setValueAtTime(0.0, t); g.gain.linearRampToValueAtTime(0.85, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
-      o.connect(g).connect(masterGain); o.start(t); o.stop(t + 0.5);
-      const o2 = audioCtx.createOscillator(); const g2 = audioCtx.createGain();
-      o2.type = 'triangle'; o2.frequency.value = 220;
-      g2.gain.setValueAtTime(0.22, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
-      o2.connect(g2).connect(masterGain); o2.start(t); o2.stop(t + 0.07);
-      break;
-    }
-    case 'shimmer': {
-      const freqs = [523.25, 659.25, 783.99, 1046.50];
-      freqs.forEach((f, i) => {
-        const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
-        o.type = 'triangle'; o.frequency.value = f * 2;
-        g.gain.setValueAtTime(0, t + i * 0.08); g.gain.linearRampToValueAtTime(0.1, t + i * 0.08 + 0.1);
-        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.08 + 1.8);
-        const filter = audioCtx.createBiquadFilter();
-        filter.type = 'highpass'; filter.frequency.value = 700;
-        o.connect(filter).connect(g).connect(masterGain);
-        o.start(t + i * 0.08); o.stop(t + i * 0.08 + 1.9);
-      });
-      break;
-    }
-    case 'pulse': {
-      const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
-      o.type = 'sine'; o.frequency.setValueAtTime(55, t);
-      o.frequency.exponentialRampToValueAtTime(38, t + 0.45);
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.72, t + 0.05);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
-      o.connect(g).connect(masterGain); o.start(t); o.stop(t + 0.55);
-      break;
-    }
-    case 'pulseDeep': {
-      const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
-      o.type = 'sine'; o.frequency.setValueAtTime(45, t);
-      o.frequency.exponentialRampToValueAtTime(28, t + 0.7);
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.9, t + 0.08);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.75);
-      o.connect(g).connect(masterGain); o.start(t); o.stop(t + 0.8);
-      const o2 = audioCtx.createOscillator(); const g2 = audioCtx.createGain();
-      o2.type = 'sine'; o2.frequency.value = 38;
-      g2.gain.setValueAtTime(0, t); g2.gain.linearRampToValueAtTime(0.5, t + 0.04);
-      g2.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
-      o2.connect(g2).connect(masterGain); o2.start(t); o2.stop(t + 0.45);
-      break;
-    }
-    case 'reveal': {
-      const fundamentals = [130.81, 164.81, 196.00, 246.94, 329.63];
-      fundamentals.forEach((f, i) => {
-        const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
-        o.type = 'sine'; o.frequency.value = f;
-        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.18, t + 0.3 + i * 0.08);
-        g.gain.exponentialRampToValueAtTime(0.001, t + 4.5);
-        o.connect(g).connect(masterGain); o.start(t); o.stop(t + 4.6);
-        const o2 = audioCtx.createOscillator(); const g2 = audioCtx.createGain();
-        o2.type = 'triangle'; o2.frequency.value = f * 2;
-        g2.gain.setValueAtTime(0, t); g2.gain.linearRampToValueAtTime(0.06, t + 0.5 + i * 0.08);
-        g2.gain.exponentialRampToValueAtTime(0.001, t + 5);
-        o2.connect(g2).connect(masterGain); o2.start(t); o2.stop(t + 5);
-      });
-      const sub = audioCtx.createOscillator(); const subG = audioCtx.createGain();
-      sub.type = 'sine'; sub.frequency.value = 65.41;
-      subG.gain.setValueAtTime(0, t); subG.gain.linearRampToValueAtTime(0.28, t + 0.2);
-      subG.gain.exponentialRampToValueAtTime(0.001, t + 3.0);
-      sub.connect(subG).connect(masterGain); sub.start(t); sub.stop(t + 3.1);
-      break;
-    }
-    case 'tick': {
-      const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
-      o.type = 'sine'; o.frequency.value = 1800;
-      g.gain.setValueAtTime(0.07, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
-      o.connect(g).connect(masterGain); o.start(t); o.stop(t + 0.03);
-      break;
-    }
-    case 'suspenseGenre': {
-      const freqs = [55, 82.41, 110, 146.83];
-      freqs.forEach((f, i) => {
-        const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
-        o.type = 'sawtooth';
-        o.frequency.setValueAtTime(f, t + i * 0.18);
-        o.frequency.linearRampToValueAtTime(f * 1.005, t + i * 0.18 + 3);
-        g.gain.setValueAtTime(0, t + i * 0.18);
-        g.gain.linearRampToValueAtTime(0.06, t + i * 0.18 + 0.6);
-        g.gain.linearRampToValueAtTime(0.09, t + i * 0.18 + 2.0);
-        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.18 + 4.5);
-        const filter = audioCtx.createBiquadFilter();
-        filter.type = 'lowpass'; filter.frequency.value = 800; filter.Q.value = 2;
-        o.connect(filter).connect(g).connect(masterGain);
-        o.start(t + i * 0.18); o.stop(t + i * 0.18 + 4.6);
-      });
-      [0.5, 0.65, 1.6, 1.75, 2.7, 2.85, 3.8, 3.95].forEach(delay => {
-        const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
-        o.type = 'sine'; o.frequency.value = 60;
-        g.gain.setValueAtTime(0, t + delay); g.gain.linearRampToValueAtTime(0.55, t + delay + 0.04);
-        g.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.18);
-        o.connect(g).connect(masterGain); o.start(t + delay); o.stop(t + delay + 0.2);
-      });
-      break;
-    }
-    case 'suspenseOrbit': {
-      const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
-      o.type = 'sine';
-      o.frequency.setValueAtTime(220, t);
-      o.frequency.linearRampToValueAtTime(440, t + 0.15);
-      g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
-      o.connect(g).connect(masterGain); o.start(t); o.stop(t + 0.22);
-      break;
-    }
-    case 'casinoTick': {
-      const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
-      o.type = 'square'; o.frequency.value = 900 + Math.random() * 300;
-      g.gain.setValueAtTime(0.09, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.018);
-      o.connect(g).connect(masterGain); o.start(t); o.stop(t + 0.02);
-      break;
-    }
-    case 'fakeAlarm': {
-      [0, 0.18, 0.36].forEach(delay => {
-        const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
-        o.type = 'sawtooth';
-        o.frequency.setValueAtTime(880, t + delay);
-        o.frequency.linearRampToValueAtTime(440, t + delay + 0.15);
-        g.gain.setValueAtTime(0, t + delay); g.gain.linearRampToValueAtTime(0.5, t + delay + 0.04);
-        g.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.17);
-        o.connect(g).connect(masterGain); o.start(t + delay); o.stop(t + delay + 0.2);
-      });
-      break;
-    }
-  }
-}
+// Écrans sur lesquels l'ambient ne tourne PAS
+// - '1' : intro (pas de son du tout)
+// - '8', 'genre', 'countdown', '10' : scan prend le relais (ou silence)
+const NO_AMBIENT_SCREENS = new Set(['1', '8', 'genre', 'countdown', '10']);
 
 function loadSoundPref() {
   try { state.soundEnabled = localStorage.getItem('binomage_sound') !== '0'; }
@@ -349,8 +182,101 @@ function updateSoundButton() {
 }
 function toggleSound() {
   state.soundEnabled = !state.soundEnabled;
-  saveSoundPref(); updateSoundButton();
-  if (state.soundEnabled) { initAudio(); snd('tap'); }
+  saveSoundPref();
+  updateSoundButton();
+  if (!state.soundEnabled) {
+    stopAmbient();
+    stopScan();
+  } else {
+    // Reprendre le son approprié pour l'écran courant
+    applyAudioForScreen(state.current);
+  }
+}
+
+/** Démarre l'ambient en fondu depuis le silence */
+function startAmbient(fadeDuration = 1500) {
+  if (!state.soundEnabled) return;
+  if (!ambientAudio.paused) return; // déjà en lecture
+  ambientAudio.volume = 0;
+  ambientAudio.play().catch(() => {});
+  fadeVolume(ambientAudio, 0.55, fadeDuration);
+}
+
+/** Arrête l'ambient avec fondu sortant */
+function stopAmbient(fadeDuration = 800) {
+  if (ambientAudio.paused) return;
+  fadeVolume(ambientAudio, 0, fadeDuration, () => {
+    ambientAudio.pause();
+    ambientAudio.currentTime = 0;
+  });
+}
+
+/** Démarre le son de scan (une fois, pas de fondu pour l'impact immédiat) */
+function startScan() {
+  if (!state.soundEnabled) return;
+  scanAudio.currentTime = 0;
+  scanAudio.volume = 0.75;
+  scanAudio.play().catch(() => {});
+}
+
+/** Arrête le son de scan avec léger fondu */
+function stopScan(fadeDuration = 600) {
+  if (scanAudio.paused) return;
+  fadeVolume(scanAudio, 0, fadeDuration, () => {
+    scanAudio.pause();
+    scanAudio.currentTime = 0;
+  });
+}
+
+/** Utilitaire fondu de volume */
+function fadeVolume(audio, targetVol, duration, onComplete) {
+  const steps = 30;
+  const stepTime = duration / steps;
+  const startVol = audio.volume;
+  const delta = (targetVol - startVol) / steps;
+  let step = 0;
+  const id = setInterval(() => {
+    step++;
+    audio.volume = Math.max(0, Math.min(1, startVol + delta * step));
+    if (step >= steps) {
+      clearInterval(id);
+      audio.volume = targetVol;
+      onComplete?.();
+    }
+  }, stepTime);
+}
+
+/**
+ * Applique la logique audio en fonction de l'écran cible.
+ * Appelé à chaque transition d'écran.
+ */
+function applyAudioForScreen(screenId) {
+  const s = String(screenId);
+
+  if (s === '1') {
+    // Intro : silence total
+    stopAmbient(500);
+    stopScan(300);
+    return;
+  }
+
+  if (s === '8') {
+    // Scan : arrêter l'ambient, lancer le son de scan
+    stopAmbient(600);
+    setTimeout(() => startScan(), 700); // légère latence pour le fondu de l'ambient
+    return;
+  }
+
+  if (NO_AMBIENT_SCREENS.has(s)) {
+    // genre / countdown / 10 : le scan continue s'il tourne encore, sinon silence
+    // On stoppe l'ambient au cas où, on ne relance pas le scan
+    stopAmbient(400);
+    return;
+  }
+
+  // Tous les autres écrans : ambient
+  stopScan(400);
+  startAmbient(1200);
 }
 
 /* -----------------------------------------------------------
@@ -482,6 +408,9 @@ function showScreen(n) {
   if (!el) return;
   el.classList.add('active');
 
+  // Appliquer la logique audio pour cet écran
+  applyAudioForScreen(state.current);
+
   const stage = $('#stage');
   stage.classList.remove('dark', 'intro-dark', 'reveal-dark');
   document.body.classList.remove('dark');
@@ -560,7 +489,6 @@ function runLiaison(html, onDone) {
   }).join(' ');
 
   lineEl.classList.remove('in', 'out');
-  snd('whoosh');
 
   const words = $$('.lw', textEl);
   words.forEach((w, i) => {
@@ -575,7 +503,6 @@ function runLiaison(html, onDone) {
       w.classList.remove('in'); w.classList.add('out');
     }, 30 * i));
     lineEl.classList.remove('in'); lineEl.classList.add('out');
-    snd('whoosh');
   }, readDuration));
 
   state.liaisonTimers.push(setTimeout(() => onDone?.(), readDuration + 700));
@@ -583,15 +510,12 @@ function runLiaison(html, onDone) {
 
 /* -----------------------------------------------------------
    9. ÉCRAN 1 — INTRO
-      FIX : Le décalage s'applique uniquement sur #introLogoArea via
-      la classe CSS "shifted". Le wrapper lui-même ne bouge PAS,
-      ce qui évite le conflit de transform et rend le mouvement naturel.
    ----------------------------------------------------------- */
 function runIntro() {
   clearTimers(state.introTimers);
 
   const wrapper       = $('#introRollingWrapper');
-  const logoArea      = $('#introLogoArea');        /* ← on cible logoArea, pas le wrapper */
+  const logoArea      = $('#introLogoArea');
   const logoContainer = $('#introLogoContainer');
   const shine         = $('#introMetalShine');
   const impact        = $('#introImpactPoint');
@@ -626,32 +550,20 @@ function runIntro() {
     return;
   }
 
-  /* T=300ms : chute du logo depuis -110vh */
   state.introTimers.push(setTimeout(() => {
     void logoContainer.offsetWidth;
     logoContainer.classList.add('drop');
     impact.classList.add('flash');
-    state.introTimers.push(setTimeout(() => snd('thud'), 1090));
-    state.introTimers.push(setTimeout(() => snd('tap'),  1870));
-    state.introTimers.push(setTimeout(() => snd('tap'),  2390));
   }, 300));
 
-  /* T=2900ms : shine métallique */
   state.introTimers.push(setTimeout(() => {
     shine.classList.add('sweep');
-    snd('shimmer');
   }, 2900));
 
-  /* T=5200ms : décalage du LOGO SEUL vers la gauche via la classe CSS "shifted"
-     Le wrapper reste centré ; seul #introLogoArea se translate.
-     La transition est définie en CSS (.intro-logo-area { transition: transform 700ms ... })
-     Pas de style inline = pas de conflit. */
   state.introTimers.push(setTimeout(() => {
-    snd('whoosh');
     logoArea.classList.add('shifted');
   }, 5200));
 
-  /* T=6100ms : ouverture du bloc texte à droite */
   state.introTimers.push(setTimeout(() => {
     contentSide.style.display = 'flex';
     contentSide.style.opacity = '';
@@ -662,27 +574,21 @@ function runIntro() {
     });
   }, 6100));
 
-  /* T=6500ms : "AE-FC" apparaît */
   state.introTimers.push(setTimeout(() => {
     textAefc.style.opacity = '';
     textAefc.classList.add('in');
-    snd('tap');
   }, 6500));
 
-  /* T=9500ms : "BINOMAGE" */
   state.introTimers.push(setTimeout(() => {
     textBinomage.style.opacity = '';
     textBinomage.classList.add('in');
-    snd('shimmer');
   }, 9500));
 
-  /* T=10600ms : tagline */
   state.introTimers.push(setTimeout(() => {
     tagline.style.opacity = '';
     tagline.classList.add('in');
   }, 10600));
 
-  /* T=13000ms : auto-advance */
   state.introTimers.push(setTimeout(() => {
     if (state.current === '1') showScreen(2);
   }, 13000));
@@ -690,7 +596,6 @@ function runIntro() {
 
 /* -----------------------------------------------------------
    10. ÉCRAN 3 — SAISIE DU CODE
-   FIX #2 : snd('shimmer') supprimé lors de la validation
    ----------------------------------------------------------- */
 function setupCodeInputs() {
   const inputs = $$('.code-input');
@@ -698,7 +603,6 @@ function setupCodeInputs() {
     inp.addEventListener('input', e => {
       const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
       e.target.value = v;
-      if (v) snd('tap');
       if (v && i < 3) inputs[i + 1].focus();
       inp.classList.toggle('filled', !!v);
       tryValidateCode();
@@ -734,7 +638,6 @@ function tryValidateCode() {
     state.fake = FAKES[code] || null;
     msg.textContent = 'Accès accordé.';
     msg.classList.remove('err'); msg.classList.add('ok');
-    /* FIX #2 — snd('shimmer') SUPPRIMÉ ici, trop intrusif */
     setTimeout(() => showScreen('liaison-toSuspense'), 700);
   } else {
     msg.textContent = 'Code invalide. Vérifiez votre invitation.';
@@ -756,10 +659,6 @@ function runSuspense() {
   const words = $$('.suspense-text .word');
   words.forEach(w => w.classList.remove('in'));
   words.forEach((w, i) => setTimeout(() => w.classList.add('in'), 120 * i + 200));
-  if (!state.reducedMotion) {
-    setTimeout(() => snd('pulse'), 600);
-    setTimeout(() => snd('pulse'), 1800);
-  }
   const dur = state.reducedMotion ? 1200 : (words.length * 120 + 1800);
   setTimeout(() => { if (state.current === '4') showScreen(5); }, dur);
 }
@@ -852,7 +751,6 @@ function runSphere() {
   setTimeout(() => {
     $('#sphereCode').textContent = state.code || 'XXXX';
     $('#sphereCore').classList.add('in');
-    snd('shimmer');
   }, DURATION - 400);
 
   setTimeout(() => { if (state.current === '5') showScreen('liaison-toFiliere'); }, DURATION + 1600);
@@ -894,7 +792,6 @@ function runFilieres() {
   const ORBIT_RY = 90;
   const TOTAL_DURATION = state.reducedMotion ? 800 : 3600;
   let startTime = null;
-  let lastSoundAngle = null;
   let orbitRunning = true;
 
   function frame(ts) {
@@ -930,12 +827,6 @@ function runFilieres() {
     cL.style.transform  = `translate(calc(${x2}px - 50%), calc(${y2}px - 50%)) scale(${scale2})`;
     cL.style.opacity    = String(opacity2);
     cL.style.zIndex     = z2 > 0 ? '10' : '2';
-
-    const currentHalf = Math.floor((elapsed / 1000) * speed * 0.3 * 2);
-    if (lastSoundAngle !== currentHalf) {
-      lastSoundAngle = currentHalf;
-      snd('suspenseOrbit');
-    }
 
     if (progress < 1) {
       state.filieresOrbitId = requestAnimationFrame(frame);
@@ -978,7 +869,6 @@ function finalizeFiliere(cardWin, cardLose, wrap) {
     cardLose.style.cssText = '';
     cardWin.classList.add('winner');
     cardLose.classList.add('loser');
-    snd('shimmer');
   }, 1380);
 
   setTimeout(() => {
@@ -1029,21 +919,10 @@ function runSpecialty() {
 
 /* -----------------------------------------------------------
    15. ÉCRAN 8 — SCAN DES PARRAINS
-   FIX #5 (DOUBLE) :
-   A) Position du vrai parrain vraiment aléatoire :
-      - Plage large : entre 30% et 80% de la liste
-      - +/- graine aléatoire réelle pour éviter la "fin de liste" prévisible
-      - Le faux parrain est placé AVANT le vrai, entre 15% et (realIdx - 3)
-   B) Bug de blocage après faux parrain corrigé :
-      - L'Observer MutationObserver est remplacé par un guard sur state.current
-      - La variable scanRunning est sur l'objet state pour être accessible partout
-      - cleanup() centralise l'arrêt propre
-      - Tous les setTimeout du scan passent par un wrapper guardé
    ----------------------------------------------------------- */
 function runScan() {
   if (state.parrain) showUniverse(state.parrain.filiere);
 
-  /* Stopper tout scan précédent proprement */
   state.scanRunning = false;
 
   const track = $('#scanTrack');
@@ -1059,39 +938,33 @@ function runScan() {
   const seen = new Set();
   allInFiliere.forEach(p => { if (!seen.has(p.nom)) { seen.add(p.nom); unique.push(p); } });
 
-  /* S'assurer qu'on a au moins quelques leurres (padding de sécurité) */
   const MIN_ITEMS = 10;
   let shuffled = [...unique].sort(() => Math.random() - 0.5);
   while (shuffled.length < MIN_ITEMS) {
     shuffled = [...shuffled, ...unique.sort(() => Math.random() - 0.5)];
   }
 
-  /* Le vrai parrain est glissé quelque part au milieu — jamais en fin de liste
-   Il ne sera jamais la dernière personne visible, le scan s'arrête sur un leurre */
-const minReal = Math.max(3, Math.floor(shuffled.length * 0.25));
-const maxReal = Math.floor(shuffled.length * 0.65);
-const realIdx = minReal + Math.floor(Math.random() * (maxReal - minReal + 1));
-shuffled.splice(realIdx, 0, { ...real, _real: true });
+  const minReal = Math.max(3, Math.floor(shuffled.length * 0.25));
+  const maxReal = Math.floor(shuffled.length * 0.65);
+  const realIdx = minReal + Math.floor(Math.random() * (maxReal - minReal + 1));
+  shuffled.splice(realIdx, 0, { ...real, _real: true });
 
-/* Personne sur laquelle le scan s'immobilise — choisie parmi les leurres APRÈS le vrai */
-const afterReal = shuffled.slice(realIdx + 1);
-const stopCandidates = afterReal.filter(p => !p._fake);
-let stopPerson = stopCandidates[Math.floor(Math.random() * stopCandidates.length)];
-if (!stopPerson) {
-  /* Fallback : on prend n'importe qui dans shuffled après le vrai, hors _fake */
-  const fallback = shuffled.slice(realIdx + 1).find(p => !p._fake && !p._real);
-  if (fallback) { stopPerson = fallback; }
-  else {
-    /* Dernier recours : on ajoute un leurre neutre en fin de liste */
-    const neutral = { ...Object.values(DB).find(p => p.filiere === real.filiere), _stop: true };
-    shuffled.push(neutral);
-    stopPerson = shuffled[shuffled.length - 1];
+  const afterReal = shuffled.slice(realIdx + 1);
+  const stopCandidates = afterReal.filter(p => !p._fake);
+  let stopPerson = stopCandidates[Math.floor(Math.random() * stopCandidates.length)];
+  if (!stopPerson) {
+    const fallback = shuffled.slice(realIdx + 1).find(p => !p._fake && !p._real);
+    if (fallback) { stopPerson = fallback; }
+    else {
+      const neutral = { ...Object.values(DB).find(p => p.filiere === real.filiere), _stop: true };
+      shuffled.push(neutral);
+      stopPerson = shuffled[shuffled.length - 1];
+    }
   }
-}
-stopPerson._stop = true;
+  stopPerson._stop = true;
 
   const sequence = shuffled;
-  const realPosition  = sequence.findIndex(p => p._real);
+  const realPosition = sequence.findIndex(p => p._real);
 
   sequence.forEach((p, idx) => {
     const row = document.createElement('div');
@@ -1105,7 +978,6 @@ stopPerson._stop = true;
       img.onload = () => { avatar.textContent = ''; avatar.classList.remove('placeholder'); avatar.appendChild(img); };
     }
     const info = document.createElement('div'); info.className = 'scan-info';
-    /* FIX A — Pas de marqueur "_fake" visible dans l'interface */
     info.innerHTML = `<div class="scan-name">${p.nom}</div><div class="scan-filiere">${p.filiere}</div>`;
     row.appendChild(avatar); row.appendChild(info); track.appendChild(row);
   });
@@ -1113,7 +985,6 @@ stopPerson._stop = true;
   const items = $$('.scan-item', track);
   const ITEM_H = window.matchMedia('(max-width:760px)').matches ? 100 : 120;
 
-  /* Positionner sans animation */
   track.style.transition = 'none';
   track.style.transform  = `translateY(0px)`;
   items.forEach((el, k) => el.classList.toggle('center', k === 0));
@@ -1123,17 +994,12 @@ stopPerson._stop = true;
   statusEl.classList.remove('warn');
   status.textContent = 'Scan des parrains';
 
-  /* FIX B — guard centralisé */
   let i = 0;
   state.scanRunning = true;
-  const screenAtLaunch = state.current; /* capture l'écran courant au démarrage */
+  const screenAtLaunch = state.current;
 
   function isStillActive() {
     return state.scanRunning && state.current === screenAtLaunch;
-  }
-
-  function cleanup() {
-    state.scanRunning = false;
   }
 
   function guardedTimeout(fn, delay) {
@@ -1145,30 +1011,18 @@ stopPerson._stop = true;
   function getDelay(idx) {
     if (state.reducedMotion) return 200;
     const distToReal = realPosition - idx;
-
-    if (distToReal > 6) {
-      return 38 + Math.random() * 22;
-    } else if (distToReal > 3) {
-      const tVal = (6 - distToReal) / 3;
-      return 60 + tVal * 180;
-    } else if (distToReal > 1) {
-      const tVal = (3 - distToReal) / 2;
-      return 240 + tVal * 380;
-    } else if (distToReal === 1) {
-      return 700;
-    } else if (distToReal === 0) {
-      return 1800;
-    } else {
-      return 400;
-    }
+    if (distToReal > 6)      return 38 + Math.random() * 22;
+    else if (distToReal > 3) { const tVal = (6 - distToReal) / 3; return 60 + tVal * 180; }
+    else if (distToReal > 1) { const tVal = (3 - distToReal) / 2; return 240 + tVal * 380; }
+    else if (distToReal === 1) return 700;
+    else if (distToReal === 0) return 1800;
+    else return 400;
   }
 
   function moveTo(targetIdx, animated) {
     const distToReal = realPosition - targetIdx;
     const delay = getDelay(targetIdx);
-    const transitionDuration = animated
-      ? Math.min(delay * 0.7, 300)
-      : 0;
+    const transitionDuration = animated ? Math.min(delay * 0.7, 300) : 0;
     track.style.transition = transitionDuration > 0
       ? `transform ${transitionDuration}ms ${distToReal < 3 ? 'cubic-bezier(0.33, 1, 0.68, 1)' : 'linear'}`
       : 'none';
@@ -1180,7 +1034,6 @@ stopPerson._stop = true;
   function next() {
     if (!isStillActive()) return;
     if (i >= items.length - 1) {
-      /* Fin de liste sans avoir trouvé le vrai → sécurité */
       statusEl.classList.remove('warn');
       status.textContent = 'Binôme identifié';
       guardedTimeout(() => {
@@ -1191,53 +1044,38 @@ stopPerson._stop = true;
 
     i++;
     const cur = sequence[i];
-    const distToReal = realPosition - i;
-
-    /* Sons */
-    if (distToReal > 4)      snd('casinoTick');
-    else if (distToReal > 0) snd('tick');
-    else if (distToReal === 0) snd('shimmer');
-
     const delay = moveTo(i, true);
 
-    /* Faux parrain */
     if (cur._fake) {
       statusEl.classList.add('warn');
       status.textContent = 'Vérification…';
-      snd('casinoTick');
       guardedTimeout(() => {
         statusEl.classList.remove('warn');
         status.textContent = 'Scan des parrains';
-        /* FIX B — on utilise guardedTimeout pour le prochain pas aussi */
         guardedTimeout(next, 80);
       }, 1400);
       return;
     }
 
     if (cur._real) {
-  /* On passe silencieusement, sans s'arrêter, sans son spécial */
-  guardedTimeout(next, 45 + Math.random() * 20);
-  return;
-}
+      guardedTimeout(next, 45 + Math.random() * 20);
+      return;
+    }
 
-if (cur._stop) {
-  /* C'est ici que le scan s'immobilise — sur un leurre */
-  snd('shimmer');
-  guardedTimeout(() => {
-    if (!isStillActive()) return;
-    status.textContent = 'Binôme identifié';
-    guardedTimeout(() => {
-      if (isStillActive()) showScreen('liaison-toCountdown');
-    }, 2200);
-  }, 1800);
-  return;
-}
+    if (cur._stop) {
+      guardedTimeout(() => {
+        if (!isStillActive()) return;
+        status.textContent = 'Binôme identifié';
+        guardedTimeout(() => {
+          if (isStillActive()) showScreen('liaison-toCountdown');
+        }, 2200);
+      }, 1800);
+      return;
+    }
 
-    /* Entrée ordinaire */
     guardedTimeout(next, delay);
   }
 
-  /* Démarrage */
   guardedTimeout(next, 900);
 }
 
@@ -1249,20 +1087,18 @@ function runGenreReveal() {
   const p = state.parrain;
   const genre = p ? (isMarraine(p.photo) ? 'marraine' : 'parrain') : 'parrain';
 
-  const label      = $('#genreLabel');
-  const question   = $('#genreQuestion');
-  const silhouettes= $('#genreSilhouettes');
-  const badge      = $('#genreBadge');
-  const figHomme   = $('#genreFigHomme');
-  const figFemme   = $('#genreFigFemme');
+  const label       = $('#genreLabel');
+  const question    = $('#genreQuestion');
+  const silhouettes = $('#genreSilhouettes');
+  const badge       = $('#genreBadge');
+  const figHomme    = $('#genreFigHomme');
+  const figFemme    = $('#genreFigFemme');
 
   [label, question, silhouettes, badge].forEach(el => {
     if (el) { el.classList.remove('in', 'pulse-badge'); el.style.opacity = '0'; }
   });
   if (figHomme) figHomme.classList.remove('lit', 'dim');
   if (figFemme) figFemme.classList.remove('lit', 'dim');
-
-  snd('suspenseGenre');
 
   state.genreTimers.push(setTimeout(() => {
     label.style.opacity = ''; label.classList.add('in');
@@ -1284,7 +1120,6 @@ function runGenreReveal() {
       figFemme.classList.add('lit'); figFemme.classList.remove('dim');
       figHomme.classList.add('dim'); figHomme.classList.remove('lit');
     }
-    if (!state.reducedMotion) snd('tap');
   }, 340);
   state.genreTimers.push(setTimeout(() => clearInterval(flashInterval), 2600));
 
@@ -1297,7 +1132,6 @@ function runGenreReveal() {
       figHomme.classList.add('lit'); figHomme.classList.remove('dim');
       figFemme.classList.add('dim'); figFemme.classList.remove('lit');
     }
-    snd('shimmer');
     badge.textContent = genre === 'marraine' ? "C'est une marraine ✦" : "C'est un parrain ✦";
     badge.style.opacity = '';
     badge.classList.add('pulse-badge');
@@ -1345,7 +1179,6 @@ function runCountdown() {
   function displayCount(n) {
     numEl.textContent = n; numEl.classList.add('in');
     spawnParticles(n);
-    if (n === 1) snd('pulseDeep'); else snd('pulse');
   }
 
   const delays = [800, 2100, 3300];
@@ -1359,7 +1192,6 @@ function runCountdown() {
     if (!state.countdownActive) return;
     const flash = $('#flashOverlay');
     flash.classList.add('flash');
-    snd('reveal');
     state.countdownTimers.push(setTimeout(() => {
       flash.classList.remove('flash');
       state.countdownActive = false;
@@ -1402,7 +1234,6 @@ function runReveal() {
     };
     buildRevealScreen(fakeData, () => {
       setTimeout(() => {
-        snd('fakeAlarm');
         const overlay = $('#revealFakeOverlay');
         const fakeSub = $('#revealFakeSub');
         if (fakeSub) {
@@ -1427,23 +1258,14 @@ function runReveal() {
   }
 }
 
-/* FIX B (suite) — runFakeToRealSequence relance le scan correctement
-   On reset scanRunning AVANT d'appeler showScreen(8) pour garantir
-   que runScan() repart d'un état propre. */
 function runFakeToRealSequence() {
   const f = state.parrain.filiere;
   showUniverse(f);
-
-  /* Reset du scan avant de revenir à l'écran 7 */
   state.scanRunning = false;
-
   showScreen(7);
-
-  /* Court-circuit de l'écran 7 — on avance après 1.2s */
   setTimeout(() => {
     if (state.current === '7') {
       showScreen(8);
-      /* runScan() est appelé automatiquement par showScreen via le dispatch */
     }
   }, 1200);
 }
@@ -1546,7 +1368,7 @@ function resetAndRestart() {
   state.countdownActive = false;
   state.fakeRevealActive = false;
   state._fakeAlreadyShown = false;
-  state.scanRunning = false; /* FIX B — stopper tout scan en cours */
+  state.scanRunning = false;
 
   clearTimers(state.countdownTimers);
   clearTimers(state.liaisonTimers);
@@ -1641,14 +1463,13 @@ function launchFromOps() {
   state.fake = FAKES[code] || null;
   state.fakeRevealActive = false;
   state._fakeAlreadyShown = false;
-  /* Annuler tout timer de restart d'une session précédente */
-if (state.stageRestartTimer) {
-  clearInterval(state.stageRestartTimer);
-  state.stageRestartTimer = null;
-  const sr = $('#stageRestart');
-  if (sr) { sr.classList.remove('in'); sr.style.display = 'none'; }
-}
-  state.scanRunning = false; /* FIX B — reset propre avant lancement */
+  if (state.stageRestartTimer) {
+    clearInterval(state.stageRestartTimer);
+    state.stageRestartTimer = null;
+    const sr = $('#stageRestart');
+    if (sr) { sr.classList.remove('in'); sr.style.display = 'none'; }
+  }
+  state.scanRunning = false;
   state.fromOps = true;
   document.body.classList.add('from-ops');
   $('#opsInput').value = '';
@@ -1664,14 +1485,21 @@ function applyMode() {
     if (document.fullscreenElement) return;
     document.documentElement.requestFullscreen?.().catch(() => {});
   };
-  document.addEventListener('click',   () => { initAudio(); tryFs(); }, { once: true });
-  document.addEventListener('keydown', () => { initAudio(); tryFs(); }, { once: true });
+  // Premier clic ou touche : init audio + fullscreen
+  const initOnInteraction = () => {
+    // Débloquer les éléments audio (politique autoplay navigateur)
+    ambientAudio.load();
+    scanAudio.load();
+    tryFs();
+  };
+  document.addEventListener('click',   initOnInteraction, { once: true });
+  document.addEventListener('keydown', initOnInteraction, { once: true });
 }
 
 /* -----------------------------------------------------------
    22. ÉVÉNEMENTS
    ----------------------------------------------------------- */
-$('#startBtn').addEventListener('click', () => { initAudio(); showScreen(3); });
+$('#startBtn').addEventListener('click', () => { showScreen(3); });
 $('#restartBtn').addEventListener('click', resetAndRestart);
 $('#shareBtn').addEventListener('click', () => {
   if (navigator.share && state.parrain) {
@@ -1699,7 +1527,7 @@ $('#opsBack').addEventListener('click', () => {
   state.countdownActive = false;
   state.fakeRevealActive = false;
   state._fakeAlreadyShown = false;
-  state.scanRunning = false; /* FIX B */
+  state.scanRunning = false;
   clearTimers(state.countdownTimers);
   clearTimers(state.liaisonTimers);
   clearTimers(state.genreTimers);
@@ -1726,7 +1554,7 @@ $$('#devNav button').forEach(b => {
     }
     state.fakeRevealActive = false;
     state._fakeAlreadyShown = false;
-    state.scanRunning = false; /* FIX B */
+    state.scanRunning = false;
     showScreen(n);
   });
 });
@@ -1749,7 +1577,7 @@ setupCodeInputs();
 applyMode();
 showScreen(1);
 
-/* Préchargement progressif */
+/* Préchargement progressif des images */
 setTimeout(() => {
   Object.values(DB).forEach(p => {
     if (p.photo) { const img = new Image(); img.src = resolvePhotoPath(p.photo); }
