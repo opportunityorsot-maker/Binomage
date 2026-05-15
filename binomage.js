@@ -31,7 +31,7 @@ const DB = {
   "KS24": { nom: "TOUAN LOU IRIE RUTH MARIE DANIELLE",  filiere: "CCA", photo: "marraine/LOU.jpg"  },
   "KE56": { nom: "KOUO PIERRE-MARIE DANIEL",            filiere: "CCA", photo: "parrains/Daniel.jpg" },
   "KA03": { nom: "LEZOU EBA RENEE NANCY",               filiere: "CCA", photo: "marraine/lezou.jpg" },
-  "KC88": { nom: "DJIBO FAOUZIA",                       filiere: "BFA", photo: "marraine/faouzi.jpg" },
+  "KC88": { nom: "DJIBO FAOUZIATOU",                       filiere: "BFA", photo: "marraine/faouzi.jpg" },
   "KD45": { nom: "BROU KOUAME EFFRIES",                 filiere: "CCA", photo: "parrains/effries.jpg" },
   "KP62": { nom: "OUATTARA HABIB TEYA SAVALGI",         filiere: "BFA", photo: "parrains/habib.jpg" },
   "KP19": { nom: "BODO ARMEL CHRIS YVAN",               filiere: "BFA", photo: "parrains/bodo.jpg" },
