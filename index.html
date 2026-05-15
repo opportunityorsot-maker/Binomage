@@ -13,9 +13,15 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Inter+Tight:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="binomage.css">
+
+  <!-- Préchargement images — noms cohérents avec le JS -->
   <link rel="preload" as="image" href="logo_aefc.png">
   <link rel="preload" as="image" href="logo_bfa.png">
-  <link rel="preload" as="image" href="logo_cca.jpeg">
+  <link rel="preload" as="image" href="logo_cca.png">
+
+  <!-- Préchargement audio pour réduire la latence au premier play() -->
+  <link rel="preload" as="audio" href="nastelbom-suspense-501709.mp3">
+  <link rel="preload" as="audio" href="solarflex-suspense-tension-515504.mp3">
 </head>
 <body class="stage-mode">
 
@@ -37,9 +43,7 @@
     <!-- ÉCRAN 1 : INTRO -->
     <section class="screen" id="screen-1" aria-label="Introduction">
       <div class="intro-stage">
-
         <div class="intro-rolling-wrapper" id="introRollingWrapper">
-
           <div class="intro-logo-area" id="introLogoArea">
             <div class="intro-logo-rotation" id="introLogoRotation">
               <div class="intro-logo-container" id="introLogoContainer">
@@ -49,7 +53,6 @@
             </div>
             <div class="intro-impact-point" id="introImpactPoint"></div>
           </div>
-
           <div class="intro-content-side" id="introContentSide">
             <div class="intro-vertical-line"></div>
             <div class="intro-text-group">
@@ -57,9 +60,7 @@
               <div class="intro-text-item intro-text-binomage" id="introTextBinomage">BINOMAGE</div>
             </div>
           </div>
-
         </div>
-
         <div class="intro-tagline-bottom" id="introTaglineBottom">Cérémonie de parrainage · 2026</div>
       </div>
     </section>
@@ -135,45 +136,29 @@
       </div>
     </section>
 
-    <!-- 
-  BINOMAGE — Patch HTML v7
-  Dans le fichier binomage.html, remplacer les deux blocs filiere-full de l'écran 6.
-  
-  AVANT (BFA) :
-    <div class="filiere-full">Banque<br/>Finance<br/>Assurance</div>
-  APRÈS :
-    <div class="filiere-full">Pur</div>
-
-  AVANT (CCA) :
-    <div class="filiere-full">Comptabilité<br/>Contrôle<br/>Audit</div>
-  APRÈS :
-    <div class="filiere-full">Dur</div>
-
-  Ci-dessous le bloc complet de l'écran 6 corrigé à coller en remplacement :
--->
-
-<!-- ÉCRAN 6 : DUEL DES FILIÈRES -->
-<section class="screen" id="screen-6" aria-label="Révélation de la filière">
-  <div class="filieres-stage">
-    <div class="caption fade-up filiere-caption">Filière révélée</div>
-    <div class="filieres-wrap" id="filieresWrap">
-      <div class="filiere-card" id="cardBFA">
-        <div class="filiere-logo">
-          <img src="logo_bfa.png" alt="BFA" onerror="this.style.display='none'" />
+    <!-- ÉCRAN 6 : DUEL DES FILIÈRES -->
+    <section class="screen" id="screen-6" aria-label="Révélation de la filière">
+      <div class="filieres-stage">
+        <div class="caption fade-up filiere-caption">Filière révélée</div>
+        <div class="filieres-wrap" id="filieresWrap">
+          <div class="filiere-card" id="cardBFA">
+            <div class="filiere-logo">
+              <img src="logo_bfa.png" alt="BFA" onerror="this.style.display='none'" />
+            </div>
+            <div class="filiere-name">BFA</div>
+            <div class="filiere-full">Pur</div>
+          </div>
+          <div class="filiere-card" id="cardCCA">
+            <div class="filiere-logo">
+              <img src="logo_cca.png" alt="CCA" onerror="this.style.display='none'" />
+            </div>
+            <div class="filiere-name">CCA</div>
+            <div class="filiere-full">Dur</div>
+          </div>
         </div>
-        <div class="filiere-name">BFA</div>
-        <div class="filiere-full">Pur</div>
       </div>
-      <div class="filiere-card" id="cardCCA">
-        <div class="filiere-logo">
-          <img src="logo_cca.png" alt="CCA" onerror="this.style.display='none'" />
-        </div>
-        <div class="filiere-name">CCA</div>
-        <div class="filiere-full">Dur</div>
-      </div>
-    </div>
-  </div>
-</section>
+    </section>
+
     <!-- ÉCRAN 7 : SPÉCIALITÉ -->
     <section class="screen" id="screen-7" aria-label="Spécialité">
       <div class="specialty-wrap" id="specialtyWrap">
@@ -250,7 +235,6 @@
         <div class="reveal-rays"></div>
         <div class="reveal-confetti" id="revealConfetti"></div>
 
-        <!-- Overlay d'erreur "Faux indice" -->
         <div class="reveal-fake-overlay" id="revealFakeOverlay">
           <div class="reveal-fake-content">
             <div class="reveal-fake-icon">
@@ -267,26 +251,22 @@
         </div>
 
         <div class="reveal-layout-horizontal">
-
           <div class="reveal-portrait-col">
             <div class="reveal-portrait-wrap" id="revealPortraitWrap">
               <div class="reveal-portrait-frame"></div>
               <div class="reveal-portrait" id="revealPortrait"></div>
             </div>
           </div>
-
           <div class="reveal-text-col" id="revealTextCol">
             <div class="reveal-eyebrow" id="revealEyebrow">Votre binôme est</div>
             <h2 class="reveal-name" id="revealName">—</h2>
             <div class="reveal-line"></div>
             <div class="reveal-badge" id="revealBadge">— · AEFC-INPHB</div>
-
             <div class="reveal-actions stage-actions" id="revealActions">
               <button class="reveal-btn" id="restartBtn">Recommencer</button>
               <button class="reveal-btn primary" id="shareBtn">Partager le moment</button>
             </div>
           </div>
-
         </div>
       </div>
       <div class="stage-restart" id="stageRestart">Nouvelle révélation dans 14s</div>
@@ -321,6 +301,11 @@
 
   </div>
 
+  <!--
+    Navigation développement — masquée en production par le JS (applyMode).
+    Pour y accéder pendant l'événement : ouvrir la console et taper
+    document.getElementById('devNav').style.display = 'flex'
+  -->
   <nav class="dev-nav" id="devNav" aria-label="Navigation des écrans (développement)">
     <button data-go="1">1</button>
     <button data-go="2">2</button>
