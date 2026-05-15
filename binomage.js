@@ -1,12 +1,16 @@
 /* ============================================================
-   BINOMAGE — Logique applicative v8
+   BINOMAGE — Logique applicative v9 (production-ready)
    AEFC-INPHB · Cérémonie de parrainage 2026
 
-   AUDIO v8 :
-   - Suppression du moteur snd() WebAudio
-   - sound_ambient.mp3 (nastelbom) : boucle sur tous les écrans
-     sauf écran 1 et sauf écran 8 → révélation finale
-   - sound_scan.mp3 (solarflex) : joué une fois pendant le scan (écran 8)
+   CORRECTIONS v9 :
+   - Audio : warm-up unlock fiable (play/pause à volume 0)
+   - Audio : scanAudio.loop = true (évite le silence si le MP3 est court)
+   - Audio : fadeVolume() protégé contre les appels concurrents
+   - Audio : gestion correcte des écrans liaison (toScan = scan, toCountdown = scan continue)
+   - Audio : stopScan + stopAmbient appelés dans resetAndRestart
+   - Audio : startScan direct sans setTimeout dans applyAudioForScreen
+   - Nav : devNav masqué en stage-mode (production)
+   - Fake : runFakeToRealSequence sécurisé contre la double navigation
    ============================================================ */
 
 /* -----------------------------------------------------------
@@ -15,7 +19,7 @@
 const DB = {
   "AK47": { nom: "YASSI CHRISLAURE",                    filiere: "CCA", photo: "marraine/yassi.jpg" },
   "BN82": { nom: "TIOKARI AMADOU",                      filiere: "BFA", photo: "parrains/tiok.jpg" },
-  "BJ15": { nom: "KOTOUDJE YANN EVRARD",                filiere: "BFA", photo: "parrains/Yann-K.jpg" },
+  "BJ15": { nom: "KOTOUDJE YANN-EVRARD",                filiere: "BFA", photo: "parrains/Yann-K.jpg" },
   "CM63": { nom: "DJIGUEMDE FATIMA ZARA",               filiere: "CCA", photo: "marraine/zara.jpg" },
   "CF29": { nom: "SANOGO ABOUBACAR SIDIK",              filiere: "CCA", photo: "parrains/sanogo.jpg" },
   "DE74": { nom: "WOUEDJE KASSI VIANNEY",               filiere: "CCA", photo: "parrains/marvin.jpg" },
@@ -27,11 +31,11 @@ const DB = {
   "EH17": { nom: "COULIBALY ABDOUL AZIZ",               filiere: "CCA", photo: "parrains/Aziz.jpg" },
   "HW85": { nom: "N'DRI ATTALIEL MOAYE",                filiere: "CCA", photo: "parrains/n'dri.jpg" },
   "KA39": { nom: "LEZOU EBA RENEE NANCY",               filiere: "CCA", photo: "marraine/lezou.jpg" },
-  "KK71": { nom: "ODEHOUR-KOUDOU PAUL-ALEX",           filiere: "BFA", photo: "parrains/odk.jpg" },
+  "KK71": { nom: "ODEHOURI-KOUDOU PAUL-ALEX",           filiere: "BFA", photo: "parrains/odk.jpg" },
   "KS24": { nom: "TOUAN LOU IRIE RUTH MARIE DANIELLE",  filiere: "CCA", photo: "marraine/LOU.jpg"  },
   "KE56": { nom: "KOUO PIERRE-MARIE DANIEL",            filiere: "CCA", photo: "parrains/Daniel.jpg" },
   "KA03": { nom: "LEZOU EBA RENEE NANCY",               filiere: "CCA", photo: "marraine/lezou.jpg" },
-  "KC88": { nom: "DJIBO FAOUZIA",                       filiere: "BFA", photo: "marraine/faouzi.jpg" },
+  "KC88": { nom: "DJIBO FAOUZIATOU",                    filiere: "BFA", photo: "marraine/faouzi.jpg" },
   "KD45": { nom: "BROU KOUAME EFFRIES",                 filiere: "CCA", photo: "parrains/effries.jpg" },
   "KP62": { nom: "OUATTARA HABIB TEYA SAVALGI",         filiere: "BFA", photo: "parrains/habib.jpg" },
   "KP19": { nom: "BODO ARMEL CHRIS YVAN",               filiere: "BFA", photo: "parrains/bodo.jpg" },
@@ -58,11 +62,11 @@ const DB = {
 };
 
 const FAKES = {
-  "KC88": { nom:"LOBE AKANETO RUTH ALEXANDRA",filiere: "BFA", photo: "marraine/lobe.jpg" },
-  "BJ15": { nom:"OUATTARA HABIB TEYA SAVALGI",filiere: "BFA", photo: "parrains/habib.jpg"},
-  "EH17": { nom: "KOUO PIERRE-MARIE DANIEL",  filiere: "CCA", photo: "parrains/Daniel.jpg" },
-  "ML04": { nom: "DJIGUEMDE FATIMA ZARA",    filiere: "CCA", photo: "marraine/zara.jpg" },
-  "KE56": { nom: "COULIBALY TCHEMON DIEUDONNE",filiere: "CCA", photo: "parrains/dieudonné.jpg" }
+  "KC88": { nom: "LOBE AKANETO RUTH ALEXANDRA",        filiere: "BFA", photo: "marraine/lobe.jpg" },
+  "BJ15": { nom: "OUATTARA HABIB TEYA SAVALGI",        filiere: "BFA", photo: "parrains/habib.jpg" },
+  "EH17": { nom: "KOUO PIERRE-MARIE DANIEL",           filiere: "CCA", photo: "parrains/Daniel.jpg" },
+  "ML04": { nom: "DJIGUEMDE FATIMA ZARA",              filiere: "CCA", photo: "marraine/zara.jpg" },
+  "KE56": { nom: "COULIBALY TCHEMON DIEUDONNE",        filiere: "CCA", photo: "parrains/dieudonné.jpg" }
 };
 
 const QUOTES = {
@@ -139,7 +143,8 @@ const state = {
   countdownActive: false,
   soundEnabled: false,
   fakeRevealActive: false,
-  scanRunning: false
+  scanRunning: false,
+  audioUnlocked: false  /* garde en mémoire si le contexte audio est débloqué */
 };
 
 function clearTimers(list) {
@@ -149,22 +154,27 @@ function clearTimers(list) {
 
 /* -----------------------------------------------------------
    4. SYSTÈME AUDIO MP3
+   -----------------------------------------------------------
+   Règles :
+   - Écran 1          → silence total
+   - Écrans 2-7, 99   → ambient en boucle (nastelbom)
+   - liaison-toScan   → ambient continue (on est encore dans la zone "avant scan")
+   - Écran 8          → coupe ambient, lance scan (solarflex) en boucle
+   - liaison-toCountdown, genre, countdown, 10 → scan continue (ne pas y toucher)
+   - Reset / retour   → tout couper, puis relancer selon l'écran cible
    ----------------------------------------------------------- */
 
-// Ambient : nastelbom-suspense — boucle sur tous les écrans sauf 1 et sauf 8→10
 const ambientAudio = new Audio('nastelbom-suspense-501709.mp3');
-ambientAudio.loop = true;
+ambientAudio.loop   = true;
 ambientAudio.volume = 0.55;
 
-// Scan : solarflex-suspense-tension — joué une fois pendant le scan (écran 8)
-const scanAudio = new Audio('solarflex-suspense-tension-515504.mp3');
-scanAudio.loop = false;
-scanAudio.volume = 0.75;
+const scanAudio   = new Audio('solarflex-suspense-tension-515504.mp3');
+scanAudio.loop    = true;   /* BOUCLE : évite le silence si le MP3 est court */
+scanAudio.volume  = 0.75;
 
-// Écrans sur lesquels l'ambient ne tourne PAS
-// - '1' : intro (pas de son du tout)
-// - '8', 'genre', 'countdown', '10' : scan prend le relais (ou silence)
-const NO_AMBIENT_SCREENS = new Set(['1', '8', 'genre', 'countdown', '10']);
+/* Intervals de fade en cours — un par piste pour éviter les conflits */
+let ambientFadeId = null;
+let scanFadeId    = null;
 
 function loadSoundPref() {
   try { state.soundEnabled = localStorage.getItem('binomage_sound') !== '0'; }
@@ -185,98 +195,118 @@ function toggleSound() {
   saveSoundPref();
   updateSoundButton();
   if (!state.soundEnabled) {
-    stopAmbient();
-    stopScan();
+    _hardStop(ambientAudio, 'ambient');
+    _hardStop(scanAudio, 'scan');
   } else {
-    // Reprendre le son approprié pour l'écran courant
     applyAudioForScreen(state.current);
   }
 }
 
-/** Démarre l'ambient en fondu depuis le silence */
-function startAmbient(fadeDuration = 1500) {
-  if (!state.soundEnabled) return;
-  if (!ambientAudio.paused) return; // déjà en lecture
-  ambientAudio.volume = 0;
-  ambientAudio.play().catch(() => {});
-  fadeVolume(ambientAudio, 0.55, fadeDuration);
+/* Arrêt immédiat sans fondu (pour mute / reset) */
+function _hardStop(audio, type) {
+  if (type === 'ambient' && ambientFadeId) { clearInterval(ambientFadeId); ambientFadeId = null; }
+  if (type === 'scan'    && scanFadeId)    { clearInterval(scanFadeId);    scanFadeId    = null; }
+  audio.pause();
+  audio.currentTime = 0;
+  audio.volume = type === 'ambient' ? 0.55 : 0.75;
 }
 
-/** Arrête l'ambient avec fondu sortant */
-function stopAmbient(fadeDuration = 800) {
-  if (ambientAudio.paused) return;
-  fadeVolume(ambientAudio, 0, fadeDuration, () => {
-    ambientAudio.pause();
-    ambientAudio.currentTime = 0;
-  });
-}
+/* Fondu de volume — protégé contre les appels concurrents */
+function _fade(audio, fadeKey, targetVol, duration, onComplete) {
+  /* Annuler le fade précédent sur cette piste */
+  if (fadeKey === 'ambient' && ambientFadeId) { clearInterval(ambientFadeId); ambientFadeId = null; }
+  if (fadeKey === 'scan'    && scanFadeId)    { clearInterval(scanFadeId);    scanFadeId    = null; }
 
-/** Démarre le son de scan (une fois, pas de fondu pour l'impact immédiat) */
-function startScan() {
-  if (!state.soundEnabled) return;
-  scanAudio.currentTime = 0;
-  scanAudio.volume = 0.75;
-  scanAudio.play().catch(() => {});
-}
-
-/** Arrête le son de scan avec léger fondu */
-function stopScan(fadeDuration = 600) {
-  if (scanAudio.paused) return;
-  fadeVolume(scanAudio, 0, fadeDuration, () => {
-    scanAudio.pause();
-    scanAudio.currentTime = 0;
-  });
-}
-
-/** Utilitaire fondu de volume */
-function fadeVolume(audio, targetVol, duration, onComplete) {
-  const steps = 30;
-  const stepTime = duration / steps;
+  const steps   = 25;
+  const stepTime = Math.max(16, duration / steps);
   const startVol = audio.volume;
-  const delta = (targetVol - startVol) / steps;
+  const delta    = (targetVol - startVol) / steps;
   let step = 0;
+
   const id = setInterval(() => {
     step++;
     audio.volume = Math.max(0, Math.min(1, startVol + delta * step));
     if (step >= steps) {
       clearInterval(id);
+      if (fadeKey === 'ambient') ambientFadeId = null;
+      if (fadeKey === 'scan')    scanFadeId    = null;
       audio.volume = targetVol;
       onComplete?.();
     }
   }, stepTime);
+
+  if (fadeKey === 'ambient') ambientFadeId = id;
+  if (fadeKey === 'scan')    scanFadeId    = id;
 }
 
-/**
- * Applique la logique audio en fonction de l'écran cible.
- * Appelé à chaque transition d'écran.
- */
+function startAmbient() {
+  if (!state.soundEnabled || !state.audioUnlocked) return;
+  if (!ambientAudio.paused) return;
+  ambientAudio.volume = 0;
+  ambientAudio.play().catch(() => {});
+  _fade(ambientAudio, 'ambient', 0.55, 1200);
+}
+
+function stopAmbient() {
+  if (ambientAudio.paused) return;
+  _fade(ambientAudio, 'ambient', 0, 700, () => {
+    ambientAudio.pause();
+    ambientAudio.currentTime = 0;
+    ambientAudio.volume = 0.55;
+  });
+}
+
+function startScan() {
+  if (!state.soundEnabled || !state.audioUnlocked) return;
+  if (!scanAudio.paused) return;
+  scanAudio.currentTime = 0;
+  scanAudio.volume = 0.75;
+  scanAudio.play().catch(() => {});
+}
+
+function stopScan() {
+  if (scanAudio.paused) return;
+  _fade(scanAudio, 'scan', 0, 700, () => {
+    scanAudio.pause();
+    scanAudio.currentTime = 0;
+    scanAudio.volume = 0.75;
+  });
+}
+
+/*
+  Logique audio par écran.
+
+  Zones :
+  ┌─ SILENCE   : écran 1
+  ├─ AMBIENT   : écrans 2 3 liaison-* 4 5 6 7 99
+  │              (liaison-toScan inclus : ambient jusqu'à l'écran 8)
+  └─ SCAN      : écran 8, liaison-toCountdown, genre, countdown, 10
+*/
 function applyAudioForScreen(screenId) {
   const s = String(screenId);
 
+  /* Silence : intro */
   if (s === '1') {
-    // Intro : silence total
-    stopAmbient(500);
-    stopScan(300);
+    stopAmbient();
+    stopScan();
     return;
   }
 
-  if (s === '8') {
-    // Scan : arrêter l'ambient, lancer le son de scan
-    stopAmbient(600);
-    setTimeout(() => startScan(), 700); // légère latence pour le fondu de l'ambient
+  /* Zone SCAN : commence à l'écran 8 et continue jusqu'à l'écran 10 inclus */
+  const SCAN_ZONE = new Set(['8', 'liaison-toCountdown', 'genre', 'countdown', '10']);
+  if (SCAN_ZONE.has(s)) {
+    stopAmbient();
+    if (s === '8') {
+      /* Point d'entrée : lancer le scan */
+      startScan();
+    }
+    /* Pour les autres écrans de la zone : le scan est déjà lancé, ne pas y toucher */
     return;
   }
 
-  if (NO_AMBIENT_SCREENS.has(s)) {
-    // genre / countdown / 10 : le scan continue s'il tourne encore, sinon silence
-    // On stoppe l'ambient au cas où, on ne relance pas le scan
-    stopAmbient(400);
-    return;
-  }
-
-  // Tous les autres écrans : ambient
-  stopScan(400);
-  startAmbient(1200);
+  /* Zone AMBIENT : tous les autres écrans */
+  stopScan();
+  startAmbient();
 }
 
 /* -----------------------------------------------------------
@@ -408,7 +438,6 @@ function showScreen(n) {
   if (!el) return;
   el.classList.add('active');
 
-  // Appliquer la logique audio pour cet écran
   applyAudioForScreen(state.current);
 
   const stage = $('#stage');
@@ -524,7 +553,6 @@ function runIntro() {
   const textBinomage  = $('#introTextBinomage');
   const tagline       = $('#introTaglineBottom');
 
-  /* — RESET COMPLET — */
   wrapper.style.cssText = '';
   logoArea.classList.remove('shifted');
   logoArea.style.cssText = '';
@@ -567,11 +595,7 @@ function runIntro() {
   state.introTimers.push(setTimeout(() => {
     contentSide.style.display = 'flex';
     contentSide.style.opacity = '';
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        contentSide.classList.add('in');
-      });
-    });
+    requestAnimationFrame(() => requestAnimationFrame(() => contentSide.classList.add('in')));
   }, 6100));
 
   state.introTimers.push(setTimeout(() => {
@@ -760,7 +784,7 @@ function runSphere() {
    13. ÉCRAN 6 — ORBITE + DUEL DES FILIÈRES
    ----------------------------------------------------------- */
 function runFilieres() {
-  const winner  = state.parrain ? state.parrain.filiere : 'CCA';
+  const winner   = state.parrain ? state.parrain.filiere : 'CCA';
   const loserKey = winner === 'BFA' ? 'CCA' : 'BFA';
   const cardWin  = $('#card' + winner);
   const cardLose = $('#card' + loserKey);
@@ -790,43 +814,35 @@ function runFilieres() {
 
   const ORBIT_RX = Math.min(220, window.innerWidth * 0.28);
   const ORBIT_RY = 90;
-  const TOTAL_DURATION = state.reducedMotion ? 800 : 3600;
+  const TOTAL_DURATION = 3600;
   let startTime = null;
   let orbitRunning = true;
 
   function frame(ts) {
     if (!orbitRunning) return;
     if (!startTime) startTime = ts;
-    const elapsed = ts - startTime;
+    const elapsed  = ts - startTime;
     const progress = Math.min(elapsed / TOTAL_DURATION, 1);
 
     const speed = 2.2 + progress * 0.8;
     const angle = (elapsed / 1000) * speed * Math.PI * 2 * 0.3;
-    const a1 = angle;
-    const a2 = angle + Math.PI;
+    const a1 = angle, a2 = angle + Math.PI;
 
-    const x1 = Math.cos(a1) * ORBIT_RX;
-    const y1 = Math.sin(a1) * ORBIT_RY;
-    const x2 = Math.cos(a2) * ORBIT_RX;
-    const y2 = Math.sin(a2) * ORBIT_RY;
-
-    const z1 = Math.sin(a1);
-    const z2 = Math.sin(a2);
-    const scale1 = 0.82 + 0.18 * ((z1 + 1) / 2);
-    const scale2 = 0.82 + 0.18 * ((z2 + 1) / 2);
+    const x1 = Math.cos(a1) * ORBIT_RX, y1 = Math.sin(a1) * ORBIT_RY;
+    const x2 = Math.cos(a2) * ORBIT_RX, y2 = Math.sin(a2) * ORBIT_RY;
+    const z1 = Math.sin(a1), z2 = Math.sin(a2);
+    const scale1   = 0.82 + 0.18 * ((z1 + 1) / 2);
+    const scale2   = 0.82 + 0.18 * ((z2 + 1) / 2);
     const opacity1 = 0.45 + 0.55 * ((z1 + 1) / 2);
     const opacity2 = 0.45 + 0.55 * ((z2 + 1) / 2);
 
-    const cW = cardWin;
-    const cL = cardLose;
+    cardWin.style.transform = `translate(calc(${x1}px - 50%), calc(${y1}px - 50%)) scale(${scale1})`;
+    cardWin.style.opacity   = String(opacity1);
+    cardWin.style.zIndex    = z1 > 0 ? '10' : '2';
 
-    cW.style.transform  = `translate(calc(${x1}px - 50%), calc(${y1}px - 50%)) scale(${scale1})`;
-    cW.style.opacity    = String(opacity1);
-    cW.style.zIndex     = z1 > 0 ? '10' : '2';
-
-    cL.style.transform  = `translate(calc(${x2}px - 50%), calc(${y2}px - 50%)) scale(${scale2})`;
-    cL.style.opacity    = String(opacity2);
-    cL.style.zIndex     = z2 > 0 ? '10' : '2';
+    cardLose.style.transform = `translate(calc(${x2}px - 50%), calc(${y2}px - 50%)) scale(${scale2})`;
+    cardLose.style.opacity   = String(opacity2);
+    cardLose.style.zIndex    = z2 > 0 ? '10' : '2';
 
     if (progress < 1) {
       state.filieresOrbitId = requestAnimationFrame(frame);
@@ -853,10 +869,8 @@ function finalizeFiliere(cardWin, cardLose, wrap) {
     const tr = 'opacity 600ms var(--ease-expo), transform 600ms var(--ease-expo)';
     cardWin.style.transition  = tr;
     cardLose.style.transition = tr;
-    cardWin.style.opacity  = '1';
-    cardLose.style.opacity = '1';
-    cardWin.style.transform  = '';
-    cardLose.style.transform = '';
+    cardWin.style.opacity  = '1'; cardLose.style.opacity  = '1';
+    cardWin.style.transform  = ''; cardLose.style.transform = '';
   }, 60);
 
   setTimeout(() => {
@@ -884,7 +898,7 @@ function runSpecialty() {
 
   showUniverse(f);
 
-  const logoEl   = $('#specialtyLogo');
+  const logoEl    = $('#specialtyLogo');
   const targetSrc = LOGOS[f];
 
   logoEl.classList.remove('loaded');
@@ -896,18 +910,11 @@ function runSpecialty() {
   img.onload = () => {
     logoEl.style.removeProperty('opacity');
     logoEl.src = img.src;
-    setTimeout(() => {
-      logoEl.classList.add('loaded');
-    }, 200);
+    setTimeout(() => logoEl.classList.add('loaded'), 200);
   };
-  img.onerror = () => {
-    logoEl.src = targetSrc;
-    logoEl.classList.add('loaded');
-  };
+  img.onerror = () => { logoEl.src = targetSrc; logoEl.classList.add('loaded'); };
   img.src = targetSrc;
-  if (img.complete) {
-    img.onload();
-  }
+  if (img.complete) img.onload();
 
   $('#specialtyName').textContent  = (f === 'BFA') ? 'Banque Finance Assurance' : 'Comptabilité Contrôle Audit';
   $('#specialtyQuote').textContent = QUOTES[f];
@@ -927,16 +934,17 @@ function runScan() {
 
   const track = $('#scanTrack');
   track.innerHTML = '';
-  track.style.transform = '';
+  track.style.transform  = '';
   track.style.transition = 'none';
 
   const real = state.parrain;
-  const fake = state.fake;
 
   const allInFiliere = Object.values(DB).filter(p => p.filiere === real.filiere);
   const unique = [];
-  const seen = new Set();
-  allInFiliere.forEach(p => { if (!seen.has(p.nom)) { seen.add(p.nom); unique.push(p); } });
+  const seen   = new Set();
+  allInFiliere.forEach(p => {
+    if (!seen.has(p.nom)) { seen.add(p.nom); unique.push(p); }
+  });
 
   const MIN_ITEMS = 10;
   let shuffled = [...unique].sort(() => Math.random() - 0.5);
@@ -949,13 +957,14 @@ function runScan() {
   const realIdx = minReal + Math.floor(Math.random() * (maxReal - minReal + 1));
   shuffled.splice(realIdx, 0, { ...real, _real: true });
 
-  const afterReal = shuffled.slice(realIdx + 1);
+  const afterReal      = shuffled.slice(realIdx + 1);
   const stopCandidates = afterReal.filter(p => !p._fake);
   let stopPerson = stopCandidates[Math.floor(Math.random() * stopCandidates.length)];
   if (!stopPerson) {
     const fallback = shuffled.slice(realIdx + 1).find(p => !p._fake && !p._real);
-    if (fallback) { stopPerson = fallback; }
-    else {
+    if (fallback) {
+      stopPerson = fallback;
+    } else {
       const neutral = { ...Object.values(DB).find(p => p.filiere === real.filiere), _stop: true };
       shuffled.push(neutral);
       stopPerson = shuffled[shuffled.length - 1];
@@ -963,11 +972,11 @@ function runScan() {
   }
   stopPerson._stop = true;
 
-  const sequence = shuffled;
+  const sequence    = shuffled;
   const realPosition = sequence.findIndex(p => p._real);
 
   sequence.forEach((p, idx) => {
-    const row = document.createElement('div');
+    const row    = document.createElement('div');
     row.className = 'scan-item'; row.dataset.idx = idx;
     const avatar = document.createElement('div');
     avatar.className = 'scan-avatar placeholder';
@@ -975,22 +984,27 @@ function runScan() {
     if (p.photo) {
       const img = document.createElement('img');
       img.src = resolvePhotoPath(p.photo); img.alt = p.nom;
-      img.onload = () => { avatar.textContent = ''; avatar.classList.remove('placeholder'); avatar.appendChild(img); };
+      img.onload = () => {
+        avatar.textContent = '';
+        avatar.classList.remove('placeholder');
+        avatar.appendChild(img);
+      };
     }
-    const info = document.createElement('div'); info.className = 'scan-info';
+    const info = document.createElement('div');
+    info.className = 'scan-info';
     info.innerHTML = `<div class="scan-name">${p.nom}</div><div class="scan-filiere">${p.filiere}</div>`;
     row.appendChild(avatar); row.appendChild(info); track.appendChild(row);
   });
 
-  const items = $$('.scan-item', track);
+  const items  = $$('.scan-item', track);
   const ITEM_H = window.matchMedia('(max-width:760px)').matches ? 100 : 120;
 
   track.style.transition = 'none';
   track.style.transform  = `translateY(0px)`;
   items.forEach((el, k) => el.classList.toggle('center', k === 0));
 
-  const status    = $('#scanStatusText');
-  const statusEl  = $('#scanStatus');
+  const status   = $('#scanStatusText');
+  const statusEl = $('#scanStatus');
   statusEl.classList.remove('warn');
   status.textContent = 'Scan des parrains';
 
@@ -1001,30 +1015,27 @@ function runScan() {
   function isStillActive() {
     return state.scanRunning && state.current === screenAtLaunch;
   }
-
   function guardedTimeout(fn, delay) {
-    return setTimeout(() => {
-      if (isStillActive()) fn();
-    }, delay);
+    return setTimeout(() => { if (isStillActive()) fn(); }, delay);
   }
 
   function getDelay(idx) {
     if (state.reducedMotion) return 200;
-    const distToReal = realPosition - idx;
-    if (distToReal > 6)      return 38 + Math.random() * 22;
-    else if (distToReal > 3) { const tVal = (6 - distToReal) / 3; return 60 + tVal * 180; }
-    else if (distToReal > 1) { const tVal = (3 - distToReal) / 2; return 240 + tVal * 380; }
-    else if (distToReal === 1) return 700;
-    else if (distToReal === 0) return 1800;
-    else return 400;
+    const d = realPosition - idx;
+    if (d > 6)       return 38 + Math.random() * 22;
+    if (d > 3)       { const t = (6 - d) / 3; return 60 + t * 180; }
+    if (d > 1)       { const t = (3 - d) / 2; return 240 + t * 380; }
+    if (d === 1)     return 700;
+    if (d === 0)     return 1800;
+    return 400;
   }
 
   function moveTo(targetIdx, animated) {
-    const distToReal = realPosition - targetIdx;
+    const d     = realPosition - targetIdx;
     const delay = getDelay(targetIdx);
-    const transitionDuration = animated ? Math.min(delay * 0.7, 300) : 0;
-    track.style.transition = transitionDuration > 0
-      ? `transform ${transitionDuration}ms ${distToReal < 3 ? 'cubic-bezier(0.33, 1, 0.68, 1)' : 'linear'}`
+    const dur   = animated ? Math.min(delay * 0.7, 300) : 0;
+    track.style.transition = dur > 0
+      ? `transform ${dur}ms ${d < 3 ? 'cubic-bezier(0.33, 1, 0.68, 1)' : 'linear'}`
       : 'none';
     track.style.transform = `translateY(${-targetIdx * ITEM_H}px)`;
     items.forEach((el, k) => el.classList.toggle('center', k === targetIdx));
@@ -1043,7 +1054,7 @@ function runScan() {
     }
 
     i++;
-    const cur = sequence[i];
+    const cur   = sequence[i];
     const delay = moveTo(i, true);
 
     if (cur._fake) {
@@ -1084,7 +1095,7 @@ function runScan() {
    ----------------------------------------------------------- */
 function runGenreReveal() {
   clearTimers(state.genreTimers);
-  const p = state.parrain;
+  const p     = state.parrain;
   const genre = p ? (isMarraine(p.photo) ? 'marraine' : 'parrain') : 'parrain';
 
   const label       = $('#genreLabel');
@@ -1156,12 +1167,10 @@ function runCountdown() {
 
   numEl.classList.remove('in', 'out'); numEl.textContent = '';
   lineEl.classList.remove('in'); labelEl.classList.remove('in');
-  introEl.classList.remove('in');
-  introEl.style.display = 'none';
+  introEl.classList.remove('in'); introEl.style.display = 'none';
 
   state.countdownTimers.push(setTimeout(() => {
-    labelEl.classList.add('in');
-    lineEl.classList.add('in');
+    labelEl.classList.add('in'); lineEl.classList.add('in');
   }, 400));
 
   const counts = [3, 2, 1];
@@ -1173,7 +1182,9 @@ function runCountdown() {
     if (idx > 0) {
       numEl.classList.remove('in'); numEl.classList.add('out');
       setTimeout(() => { numEl.classList.remove('out'); displayCount(n); }, 400);
-    } else { displayCount(n); }
+    } else {
+      displayCount(n);
+    }
     idx++;
   }
   function displayCount(n) {
@@ -1181,8 +1192,7 @@ function runCountdown() {
     spawnParticles(n);
   }
 
-  const delays = [800, 2100, 3300];
-  delays.forEach(d => {
+  [800, 2100, 3300].forEach(d => {
     state.countdownTimers.push(setTimeout(() => {
       if (state.countdownActive) showCount();
     }, d));
@@ -1206,9 +1216,9 @@ function spawnParticles(num) {
   const count = state.reducedMotion ? 0 : (num === 1 ? 20 : 10);
   for (let i = 0; i < count; i++) {
     const p = document.createElement('div'); p.className = 'cd-particle';
-    const x = 30 + Math.random() * 40;
-    const size = 2 + Math.random() * 3;
-    const dur = 1.5 + Math.random() * 2;
+    const x     = 30 + Math.random() * 40;
+    const size  = 2  + Math.random() * 3;
+    const dur   = 1.5 + Math.random() * 2;
     const delay = Math.random() * 0.5;
     p.style.cssText = `left:${x}%; top:${20 + Math.random() * 60}%; width:${size}px; height:${size * (2 + Math.random() * 2)}px; background:${CONFETTI_COLORS[Math.floor(Math.random() * 3)]}; animation:confettiFall ${dur}s ${delay}s linear forwards; transform:rotate(${Math.random() * 360}deg);`;
     container.appendChild(p);
@@ -1227,23 +1237,19 @@ function runReveal() {
 
   if (isFakeReveal) {
     state.fakeRevealActive = true;
-    const fakeData = {
-      nom: state.fake.nom,
-      filiere: p.filiere,
-      photo: state.fake.photo
-    };
+    const fakeData = { nom: state.fake.nom, filiere: p.filiere, photo: state.fake.photo };
     buildRevealScreen(fakeData, () => {
       setTimeout(() => {
         const overlay = $('#revealFakeOverlay');
         const fakeSub = $('#revealFakeSub');
         if (fakeSub) {
-          const fakeGenre = isMarraine(fakeData.photo) ? 'Cette marraine' : 'Ce parrain';
-          fakeSub.textContent = `${fakeGenre} n'est pas votre binôme… Le destin nous a joué un tour.`;
+          const g = isMarraine(fakeData.photo) ? 'Cette marraine' : 'Ce parrain';
+          fakeSub.textContent = `${g} n'est pas votre binôme… Le destin nous a joué un tour.`;
         }
         overlay.classList.add('in');
         setTimeout(() => {
           overlay.classList.remove('in');
-          state.fakeRevealActive = false;
+          state.fakeRevealActive  = false;
           state._fakeAlreadyShown = true;
           runFakeToRealSequence();
         }, 2800);
@@ -1258,16 +1264,17 @@ function runReveal() {
   }
 }
 
+/*
+  runFakeToRealSequence : relance le scan pour révéler le vrai parrain.
+  On reset scanRunning AVANT d'appeler showScreen pour éviter toute
+  double navigation. Le showScreen(7) lancera runSpecialty() qui
+  lui-même appellera showScreen('liaison-toScan') → showScreen(8).
+  Le setTimeout de garde est supprimé : plus de risque de conflit.
+*/
 function runFakeToRealSequence() {
-  const f = state.parrain.filiere;
-  showUniverse(f);
   state.scanRunning = false;
+  showUniverse(state.parrain.filiere);
   showScreen(7);
-  setTimeout(() => {
-    if (state.current === '7') {
-      showScreen(8);
-    }
-  }, 1200);
 }
 
 function buildRevealScreen(person, onReady) {
@@ -1281,7 +1288,6 @@ function buildRevealScreen(person, onReady) {
   const overlay  = $('#revealFakeOverlay');
 
   overlay.classList.remove('in');
-
   [eyebrow, portWrap, nameEl, lineEl, badgeEl, actEl].forEach(el => {
     if (el) el.classList.remove('in');
   });
@@ -1294,7 +1300,7 @@ function buildRevealScreen(person, onReady) {
   if (person.photo) {
     const img = document.createElement('img'); img.alt = person.nom;
     img.src = resolvePhotoPath(person.photo);
-    img.onload = () => { portrait.appendChild(img); setTimeout(() => img.classList.add('loaded'), 100); };
+    img.onload  = () => { portrait.appendChild(img); setTimeout(() => img.classList.add('loaded'), 100); };
     img.onerror = () => {
       portrait.classList.add('placeholder');
       const span = document.createElement('span'); span.textContent = initials(person.nom);
@@ -1315,12 +1321,12 @@ function buildRevealScreen(person, onReady) {
   badgeEl.textContent = person.filiere + ' · AEFC-INPHB';
 
   requestAnimationFrame(() => {
-    setTimeout(() => eyebrow.classList.add('in'),   150);
-    setTimeout(() => portWrap.classList.add('in'),  400);
-    setTimeout(() => nameEl.classList.add('in'),   1200);
-    setTimeout(() => lineEl.classList.add('in'),   1500);
-    setTimeout(() => badgeEl.classList.add('in'),  1700);
-    setTimeout(() => actEl.classList.add('in'),    2000);
+    setTimeout(() => eyebrow.classList.add('in'),  150);
+    setTimeout(() => portWrap.classList.add('in'), 400);
+    setTimeout(() => nameEl.classList.add('in'),  1200);
+    setTimeout(() => lineEl.classList.add('in'),  1500);
+    setTimeout(() => badgeEl.classList.add('in'), 1700);
+    setTimeout(() => actEl.classList.add('in'),   2000);
     setTimeout(() => { if (!state.reducedMotion && state.current === '10') spawnConfetti(); }, 1000);
     setTimeout(() => onReady?.(), 2100);
   });
@@ -1346,12 +1352,12 @@ function spawnConfetti() {
   if (!container) return;
   container.innerHTML = '';
   for (let i = 0; i < 55; i++) {
-    const p = document.createElement('div'); p.className = 'confetti-piece';
+    const p     = document.createElement('div'); p.className = 'confetti-piece';
     const color = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
-    const x = 5 + Math.random() * 90;
-    const dur = 2.5 + Math.random() * 3;
+    const x     = 5 + Math.random() * 90;
+    const dur   = 2.5 + Math.random() * 3;
     const delay = 0.1 + Math.random() * 2;
-    const w = 3 + Math.random() * 5; const h = 8 + Math.random() * 14;
+    const w = 3 + Math.random() * 5, h = 8 + Math.random() * 14;
     p.style.cssText = `left:${x}%; top:-20px; width:${w}px; height:${h}px; background:${color}; animation-duration:${dur}s; animation-delay:${delay}s; border-radius:${Math.random() > 0.5 ? '50%' : '2px'};`;
     container.appendChild(p);
     setTimeout(() => p.remove(), (dur + delay) * 1000 + 500);
@@ -1362,13 +1368,17 @@ function spawnConfetti() {
    19. RESET
    ----------------------------------------------------------- */
 function resetAndRestart() {
-  state.code = null;
-  state.parrain = null;
-  state.fake = null;
-  state.countdownActive = false;
-  state.fakeRevealActive = false;
+  /* Stopper l'audio immédiatement */
+  _hardStop(ambientAudio, 'ambient');
+  _hardStop(scanAudio,    'scan');
+
+  state.code              = null;
+  state.parrain           = null;
+  state.fake              = null;
+  state.countdownActive   = false;
+  state.fakeRevealActive  = false;
   state._fakeAlreadyShown = false;
-  state.scanRunning = false;
+  state.scanRunning       = false;
 
   clearTimers(state.countdownTimers);
   clearTimers(state.liaisonTimers);
@@ -1379,15 +1389,18 @@ function resetAndRestart() {
     cancelAnimationFrame(state.filieresOrbitId);
     state.filieresOrbitId = null;
   }
+  if (sphereAnimId) { cancelAnimationFrame(sphereAnimId); sphereAnimId = null; }
 
   $$('.code-input').forEach(i => { i.value = ''; i.classList.remove('filled'); });
   $('#codeMsg').textContent = '\u00A0';
   $('#codeMsg').classList.remove('err', 'ok');
 
-  if (state.stageRestartTimer) { clearInterval(state.stageRestartTimer); state.stageRestartTimer = null; }
+  if (state.stageRestartTimer) {
+    clearInterval(state.stageRestartTimer);
+    state.stageRestartTimer = null;
+  }
   const sr = $('#stageRestart');
   if (sr) { sr.classList.remove('in'); sr.style.display = 'none'; }
-  if (sphereAnimId) { cancelAnimationFrame(sphereAnimId); sphereAnimId = null; }
 
   const overlay = $('#revealFakeOverlay');
   if (overlay) overlay.classList.remove('in');
@@ -1407,14 +1420,15 @@ function resetAndRestart() {
    20. RÉGIE
    ----------------------------------------------------------- */
 function renderHistory() {
-  const h = loadHistory(); $('#opsCount').textContent = h.length;
+  const h    = loadHistory();
+  $('#opsCount').textContent = h.length;
   const body = $('#opsHistoryBody');
   if (h.length === 0) {
     body.innerHTML = '<div class="ops-history-empty">Aucun code utilisé pour l\'instant</div>';
     return;
   }
   body.innerHTML = '<ul>' + h.map(e => {
-    const d = new Date(e.ts);
+    const d    = new Date(e.ts);
     const time = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
     return `<li><span class="h-code">${e.code}</span><span class="h-name">${e.nom}</span><span class="h-time">${time}</span></li>`;
   }).join('') + '</ul>';
@@ -1423,12 +1437,12 @@ function renderHistory() {
 function renderOpsPreview(code) {
   const pv = $('#opsPreview');
   if (!code || code.length === 0) {
-    pv.className = 'ops-preview empty';
+    pv.className   = 'ops-preview empty';
     pv.textContent = 'Tapez un code pour prévisualiser le parrain attendu';
     $('#opsLaunch').disabled = true; return;
   }
   if (code.length < 4) {
-    pv.className = 'ops-preview empty';
+    pv.className   = 'ops-preview empty';
     pv.textContent = `Code partiel (${code.length}/4)…`;
     $('#opsLaunch').disabled = true; return;
   }
@@ -1438,12 +1452,14 @@ function renderOpsPreview(code) {
     pv.innerHTML = `<div class="pv-avatar">?</div><div class="pv-info"><div class="pv-name" style="color:#DC2626">Code inconnu</div><div class="pv-meta">Le code <strong style="font-family:var(--mono);color:var(--ink)">${code}</strong> n'existe pas.</div></div>`;
     $('#opsLaunch').disabled = true; return;
   }
-  const used = isUsed(code); const fake = FAKES[code];
+  const used  = isUsed(code);
+  const fake  = FAKES[code];
   const genre = isMarraine(p.photo) ? 'Marraine' : 'Parrain';
   pv.className = 'ops-preview';
   pv.innerHTML = `<div class="pv-avatar" id="pvAvatar">${initials(p.nom)}</div><div class="pv-info"><div class="pv-name">${p.nom}</div><div class="pv-meta"><span class="pv-badge ${p.filiere.toLowerCase()}">${p.filiere} · ${genre}</span>${used ? '<span class="pv-badge used">Déjà révélé</span>' : ''}${fake ? '<span class="pv-badge fake">Faux indice : ' + fake.nom.split(' ').slice(0, 2).join(' ') + '</span>' : ''}</div></div>`;
   if (p.photo) {
-    const img = document.createElement('img'); img.src = resolvePhotoPath(p.photo); img.alt = p.nom;
+    const img = document.createElement('img');
+    img.src   = resolvePhotoPath(p.photo); img.alt = p.nom;
     img.onload = () => { const av = $('#pvAvatar'); if (av) { av.textContent = ''; av.appendChild(img); } };
   }
   $('#opsLaunch').disabled = false;
@@ -1451,25 +1467,26 @@ function renderOpsPreview(code) {
 
 function runOps() {
   $('#opsTotal').textContent = Object.keys(DB).length;
-  renderHistory(); renderOpsPreview('');
+  renderHistory();
+  renderOpsPreview('');
   setTimeout(() => $('#opsInput').focus(), 300);
 }
 
 function launchFromOps() {
   const code = $('#opsInput').value;
   if (!DB[code]) return;
-  state.code = code;
-  state.parrain = DB[code];
-  state.fake = FAKES[code] || null;
-  state.fakeRevealActive = false;
+  state.code              = code;
+  state.parrain           = DB[code];
+  state.fake              = FAKES[code] || null;
+  state.fakeRevealActive  = false;
   state._fakeAlreadyShown = false;
+  state.scanRunning       = false;
   if (state.stageRestartTimer) {
     clearInterval(state.stageRestartTimer);
     state.stageRestartTimer = null;
     const sr = $('#stageRestart');
     if (sr) { sr.classList.remove('in'); sr.style.display = 'none'; }
   }
-  state.scanRunning = false;
   state.fromOps = true;
   document.body.classList.add('from-ops');
   $('#opsInput').value = '';
@@ -1478,30 +1495,71 @@ function launchFromOps() {
 
 /* -----------------------------------------------------------
    21. MODE SCÈNE
+   -----------------------------------------------------------
+   - Masque la dev-nav en mode production
+   - Débloque l'audio dès le premier geste (warm-up play/pause)
    ----------------------------------------------------------- */
 function applyMode() {
   document.body.classList.add('stage-mode');
+
+  /* Masquer la navigation de développement en production */
+  const devNav = $('#devNav');
+  if (devNav) devNav.style.display = 'none';
+
   const tryFs = () => {
     if (document.fullscreenElement) return;
     document.documentElement.requestFullscreen?.().catch(() => {});
   };
-  // Premier clic ou touche : init audio + fullscreen
-  const initOnInteraction = () => {
-    // Débloquer les éléments audio (politique autoplay navigateur)
-    ambientAudio.load();
-    scanAudio.load();
+
+  /*
+    Warm-up audio : jouer à volume 0 puis mettre en pause immédiatement.
+    Cela débloque la politique autoplay du navigateur une fois pour toutes.
+    Sans ça, tout play() ultérieur (même 5 min plus tard) peut être refusé.
+  */
+  const unlockAudio = () => {
+    let unlocked = 0;
+    [ambientAudio, scanAudio].forEach(audio => {
+      const savedVol = audio.volume;
+      audio.volume   = 0;
+      const p = audio.play();
+      if (p !== undefined) {
+        p.then(() => {
+          audio.pause();
+          audio.currentTime = 0;
+          audio.volume = savedVol;
+          unlocked++;
+          if (unlocked === 2) {
+            state.audioUnlocked = true;
+            /* Appliquer le bon son pour l'écran courant maintenant que l'audio est prêt */
+            applyAudioForScreen(state.current);
+          }
+        }).catch(() => {});
+      } else {
+        /* API synchrone (rare) : considérer comme débloqué */
+        audio.pause();
+        audio.currentTime = 0;
+        audio.volume = savedVol;
+        unlocked++;
+        if (unlocked === 2) {
+          state.audioUnlocked = true;
+          applyAudioForScreen(state.current);
+        }
+      }
+    });
     tryFs();
   };
-  document.addEventListener('click',   initOnInteraction, { once: true });
-  document.addEventListener('keydown', initOnInteraction, { once: true });
+
+  document.addEventListener('click',      unlockAudio, { once: true });
+  document.addEventListener('keydown',    unlockAudio, { once: true });
+  document.addEventListener('touchstart', unlockAudio, { once: true });
 }
 
 /* -----------------------------------------------------------
    22. ÉVÉNEMENTS
    ----------------------------------------------------------- */
-$('#startBtn').addEventListener('click', () => { showScreen(3); });
+$('#startBtn').addEventListener('click',   () => showScreen(3));
 $('#restartBtn').addEventListener('click', resetAndRestart);
-$('#shareBtn').addEventListener('click', () => {
+$('#shareBtn').addEventListener('click',   () => {
   if (navigator.share && state.parrain) {
     navigator.share({ title: 'BINOMAGE 2026', text: `Mon binôme : ${state.parrain.nom}` }).catch(() => {});
   } else {
@@ -1520,14 +1578,14 @@ opsInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !$('#opsLaunch').disabled) launchFromOps();
 });
 $('#opsLaunch').addEventListener('click', launchFromOps);
-$('#opsClear').addEventListener('click', () => {
+$('#opsClear').addEventListener('click',  () => {
   if (confirm('Réinitialiser l\'historique de la session ?')) { clearHistory(); renderHistory(); }
 });
 $('#opsBack').addEventListener('click', () => {
-  state.countdownActive = false;
-  state.fakeRevealActive = false;
+  state.countdownActive   = false;
+  state.fakeRevealActive  = false;
   state._fakeAlreadyShown = false;
-  state.scanRunning = false;
+  state.scanRunning       = false;
   clearTimers(state.countdownTimers);
   clearTimers(state.liaisonTimers);
   clearTimers(state.genreTimers);
@@ -1537,33 +1595,23 @@ $('#opsBack').addEventListener('click', () => {
   if (sphereAnimId) { cancelAnimationFrame(sphereAnimId); sphereAnimId = null; }
   const overlay = $('#revealFakeOverlay');
   if (overlay) overlay.classList.remove('in');
+  _hardStop(ambientAudio, 'ambient');
+  _hardStop(scanAudio,    'scan');
   hideUniverse();
   document.body.classList.remove('from-ops');
   state.fromOps = false;
   showScreen(99);
 });
 
-$$('#devNav button').forEach(b => {
-  b.addEventListener('click', () => {
-    const go = b.dataset.go;
-    const n = (isNaN(go) || go === 'countdown' || go === 'genre') ? go : parseInt(go);
-    if (!state.parrain) {
-      state.code = 'KM28';
-      state.parrain = DB['KM28'];
-      state.fake = FAKES['KM28'] || null;
-    }
-    state.fakeRevealActive = false;
-    state._fakeAlreadyShown = false;
-    state.scanRunning = false;
-    showScreen(n);
-  });
-});
-
 document.addEventListener('keydown', e => {
   if (e.key === 'r' && e.ctrlKey) {
     e.preventDefault();
     state.countdownActive = false;
-    if (state.fromOps) { state.fromOps = false; document.body.classList.remove('from-ops'); showScreen(99); }
+    if (state.fromOps) {
+      state.fromOps = false;
+      document.body.classList.remove('from-ops');
+      showScreen(99);
+    }
   }
   if (e.key === 'Escape') { state.countdownActive = false; resetAndRestart(); }
   if (e.key === 'm' || e.key === 'M') toggleSound();
@@ -1582,7 +1630,5 @@ setTimeout(() => {
   Object.values(DB).forEach(p => {
     if (p.photo) { const img = new Image(); img.src = resolvePhotoPath(p.photo); }
   });
-  Object.values(LOGOS).forEach(src => {
-    const img = new Image(); img.src = src;
-  });
+  Object.values(LOGOS).forEach(src => { const img = new Image(); img.src = src; });
 }, 0);
